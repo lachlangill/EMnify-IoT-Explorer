@@ -13,11 +13,13 @@ var backlight = true;
 var updateIntervalId; // 
 var update_interval_ms = 10000; // timeout duration in ms
 
-var all_operators = [];
+var carrier_id = [];
+var carrier_name = [];
 var visible_gsm_networks = [];
 var visible_catm_networks = [];
 var visible_nb_networks = []; //these are populated by the scanCarriers() function
 var scan_result = "";
+var selected_carrier = 0;
 
 //LTE bands
 var LTE_B1 = "1";
@@ -75,6 +77,28 @@ function mainScreen() {
 	g.flip();
 }
 
+function testScreen() {
+	g.clear();
+	g.setFont8x12();
+	g.drawString("Network Test",30,0);
+	g.setFont6x8();
+	g.drawString("Carrier ID: ",2,12);
+	g.drawString("Carrier Name: ",2,22);
+	g.drawString(carrier_id[selected_carrier],70,12);
+	g.drawString(carrier_name[selected_carrier],70,22);
+}
+
+function loadingIcon(count) {
+	g.setColor(0);
+	g.fillRect(115,51,127,63);
+	g.setColor(1);
+	g.drawLine(117+((count%20)),53, 117-((count%20)),61);
+	g.flip();
+}
+
+
+
+//----- MODEM FUNCTIONS -----//
 sendAtCommand = function (command, timeoutMs, waitForLine) {
 	return new Promise((resolve, reject) => {
 		var answer = "";
@@ -91,7 +115,6 @@ sendAtCommand = function (command, timeoutMs, waitForLine) {
 	});
 };
 
-//----- MODEM FUNCTIONS -----//
 function resetModem() {
 	sendAtCommand('AT&F0')										//factory reset
 	.then(() => sendAtCommand('ATE0'))							//command echo off
@@ -105,20 +128,8 @@ function configureModem(lte_band) {
 	.then(() => sendAtCommand('AT+QCFG=\"nwscanseq\",02,1'))				//network scan sequence - 02=CAT-M
 	.then(() => sendAtCommand('AT+QCFG=\"nwscanmode\",3,1'))				//scan mode - CAT-M
 	.then(() => sendAtCommand('AT+QCFG=\"iotopmode\",0,1'))					//IoT search mode - 0=CAT-M only, 2=CAT-M and NBIoT
-	.then(() => sendAtCommand('AT+QCFG=\"servicedomain\",1,1'))				//service domain - PS only
-	.then(() => g.setFontBitmap())
-	.then(() => g.drawString("Configured.", 1,57)) //indicate when fully configured
-	.then(() => g.flip());
+	.then(() => sendAtCommand('AT+QCFG=\"servicedomain\",1,1'));				//service domain - PS only
 	
-}
-
-function connectModem(carrier) {
-	//requires operator in numeric format
-	sendAtCommand('AT+CGDCONT=1,\"IP\",\"em\",,')						//connection details
-	.then(() => sendAtCommand('AT+CFUN=1'))								//turn on modem transmitter
-	.then(() => sendAtCommand('AT+QGPS=1'))								//turn on GNSS
-	.then(() => sendAtCommand('AT+CEREG=2'))							//register to network
-	.then(() => sendAtCommand('AT+COPS=1,2,' + carrier + ',8', 5000));	//8 - CAT-M
 }
 
 function scanCarriers() {
@@ -135,7 +146,7 @@ function parseScanResult() {
 	if (num == -1) {											//auto rescan if no carriers are found
 		console.log("No carriers found. Rescanning...");
 		scanCarriers();
-		setTimeout(function() {parseScanResult();}, 10000);
+		setTimeout(function() {parseScanResult();}, 5000);
 	}
 	console.log("num = " + num);
 	temp = temp.slice(num, -1); // remove junk from start of scan results
@@ -147,32 +158,77 @@ function parseScanResult() {
 	var x2; // long carrier name
 	var x3; // short carrier name
 	var x4; // location that holds the carrier number
-	var carrier_id;
-	
-	var slice_position
+	var temp_id;
 	
 	while (true) {
 		
-		carrier_id = temp[iteration + 3];
-		all_operators[iteration] = carrier_id.slice(2,-2); // WORKING FOR ONE CARRIER
-		console.log("carrier ID = " + all_operators[iteration]);
+		temp_id = temp[iteration + 3];
+		carrier_id[iteration] = temp_id.slice(2,-2); // WORKING FOR ONE CARRIER
+		temp_name = temp[iteration + 1];
+		carrier_name[iteration] = temp_name.slice(2,-2);
+		console.log("carrier ID = " + carrier_id[iteration]);
+		console.log("carrier name = " + carrier_name[iteration]);
 		
 		break; // TODO - remove and test with multiple carriers 
 	
 	}
 }
 
-function autoScan() {
+function connectModem(carrier) {
+	//requires operator in numeric format
+	sendAtCommand('AT+CGDCONT=1,\"IP\",\"em\",,')						//connection details
+	.then(() => sendAtCommand('AT+CFUN=1'))								//turn on modem transmitter
+	.then(() => sendAtCommand('AT+QGPS=1'))								//turn on GNSS
+	.then(() => sendAtCommand('AT+CEREG=2'))							//register to network
+	.then(() => sendAtCommand('AT+COPS=1,2,' + carrier + ',8', 5000));	//8 - CAT-M
+}
+
+function autoTest() {
+	testScreen();
+	//reset and scan for carriers
 	resetModem();
 	console.log("reset modem");
+	
 	setTimeout(function() {configureModem(LTE_CATM1_ANY);}, 3000);
 	setTimeout(function() {console.log("configured modem");}, 3000);
 	setTimeout(function() {scanCarriers();}, 8000);
 	setTimeout(function() {console.log("scanned carriers");}, 8000);
-	setTimeout(function() {parseScanResult();}, 18000);
-	setTimeout(function() {console.log("parsing scan result");}, 18000);
+	setTimeout(function() {parseScanResult();}, 13000);
+	setTimeout(function() {console.log("parsing scan result");}, 13000);
+	
+	//carrier test - TODO - increase complexity of test, iterate through all discovered carriers
+	g.setFontBitmap();
+	g.drawString("Waiting for carrier discovery...",2,40);
+	g.flip();
+	
+	var i = 0;
+	testScreen(); //redraw without loading and with operator details
+	
+	setTimeout(function() {connectModem(carrier_id[0]);}, 5000);
+	setTimeout(function() {console.log("connecting to operator");}, 5000);
 	
 }
+
+function autoTestTEMP() {
+	testScreen();
+	//reset and scan for carriers
+	resetModem()
+	.then(() => configureModem(LTE_CATM1_ANY))
+	.then(() => scanCarriers())
+	.then(() => g.setFontBitmap())
+	.then(() => g.drawString("Waiting for carrier discovery...",2,40))
+	.then(() => g.flip())
+	.then(() => parseScanResult())
+	.then(() => testScreen()) //redraw after successful parse of scan
+	.then(() => connectModem(carrier_id[0]))
+	.then(() => console.log("connecting to operator"));
+	
+}
+
+function manualTest() {
+	// TODO
+}
+
 
 
 //----- MAIN FUNCTION -----//
@@ -192,11 +248,7 @@ function onInit() {
 	digitalWrite(LED1,backlight); // turn on backlight
 	
 	startupScreen();
-	autoScan();
-	
-
-	//for (var i=0;i<all_operators.length;i+=1) console.log(all_operators[i] + "\r\n");
-	//setTimeout(function() {connectModem(selected_carrier);} , 5000); // connect modem after 5 seconds
+	setTimeout(function() {autoTestTEMP();}, 5000);
 	
 }
 onInit(); //auto run during dev
