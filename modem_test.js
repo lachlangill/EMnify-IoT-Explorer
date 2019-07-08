@@ -1,18 +1,19 @@
-// testing device IMEI - 8684460306494107
-// testing device endpoint name - nbpi4 - lachlan
+// testing device IMEI: 8684460306494107
+// testing device endpoint name: nbpi4 - lachlan
 // 10.192.200.12
 
 //TO ADD
-// - EDRX test
-// - manual test + control buttons
-// - multiple carrier auto test
-// - new LTE array and names
+// - testing method and result quantification
+// - fix scan result parsing
+// - EDRX testing
+// - manual test starting + control buttons
+// - multiple carrier and band auto test
 
 //BUTTONS CONFIG
-// 1 - backlight toggleBacklight
-// 2 - manual/auto test toggle
+// 1 - backlight toggle
+// 2 - cycle test parameters
 // 3 - start manual test/advance through selection parameters
-// 4 - cycle test parameters
+// 4 - manual/auto test toggle
 
 //----- VARIABLES -----//
 var debug = true; //change to false when finished
@@ -26,6 +27,8 @@ var visible_catm_networks = [];
 var visible_nb_networks = [];
 var scan_result = "";
 var scan_successful = 0;
+
+var update_after_scan = 0;
 
 //LTE bands
 var LTE_B1 = "1";
@@ -49,7 +52,7 @@ var LTE_NO_CHANGE = "0";
 var LTE_BANDS = ["1","2","4","8","10","80","800","1000","20000","40000","80000","2000000","8000000","4000000000","400A0E189F","A0E189F","0"];
 var LTE_NAMES = ["B1","B2","B3","B4","B5","B8","B12","B13","B18","B19","B20","B26","B28","B39","CATM1_ANY","CATNB1_ANY","NO_CHANGE"];
 
-var selected_lte = 15;
+var selected_lte = 14;
 var selected_carrier = 0;
 
 require("Font6x8").add(Graphics);
@@ -63,9 +66,11 @@ function toggleBacklight() {
 
 function cycleCarrier() {
 	selected_carrier += 1;
+	
 	if (carrier_id[selected_carrier] == null) {
 		selected_carrier = 0;
 	}
+	console.log(selected_carrier);
 }
 
 function cycleBand() {
@@ -73,6 +78,59 @@ function cycleBand() {
 	if (LTE_BANDS[selected_lte] == "0") {
 		selected_lte = 0;
 	}
+	console.log(selected_lte);
+}
+
+function assignButtons(current_screen) {	//button configuration - TOP LEFT CCW - 1,2,3,4
+	clearButtons();
+	setWatch(() => {
+		toggleBacklight();
+	}, BTN1, {edge:"rising", debounce:50, repeat:true});
+	if (current_screen == 0) {						// automatic testing screen
+		setWatch(() => {
+			if (scan_successful) 	{				//only allow manual test after successful scan
+				manualTest();
+			}
+		}, BTN4, {edge:"rising", debounce:50, repeat:true});
+	} else if (current_screen == 1) {				// manual testing screen
+		setWatch(() => {
+			autoTest();
+		}, BTN4, {edge:"rising", debounce:50, repeat:true});
+		setWatch(() => {
+			cycleCarrier();
+			g.setFont6x8();
+			g.setColor(0);
+			g.fillRect(70,10,127,32);								//CHECK
+			g.setColor(1);
+			g.drawString(carrier_id[selected_carrier],70,12);
+			g.drawString(carrier_name[selected_carrier],70,22);
+			g.flip();
+		}, BTN2, {edge:"rising", debounce:50, repeat:true});
+		setWatch(() => {
+			bandSelectScreen();
+		}, BTN3, {edge:"rising", debounce:50, repeat:true});
+	
+	} else if (current_screen == 2) { 				// band select screen
+		setWatch(() => {
+			autoTest();
+		}, BTN4, {edge:"rising", debounce:50, repeat:true});
+		setWatch(() => {
+			cycleBand();
+			g.setFont6x8();
+			g.setColor(0);
+			g.fillRect(70,30,127,42);							//CHECK
+			g.setColor(1);
+			g.drawString(LTE_NAMES[selected_lte],70,32); 				//CHECK
+			g.flip();
+		}, BTN2, {edge:"rising", debounce:50, repeat:true});
+		setWatch(() => {
+			startManualTest();									//TODO - get working
+		}, BTN3, {edge:"rising", debounce:50, repeat:true});
+	}
+}
+
+function clearButtons() {
+	clearWatch();
 }
 
 //----- DISPLAY FUNCTIONS -----//
@@ -90,11 +148,7 @@ function startupScreen() {
 }
 
 function mainScreen() {
-	//buttons
-	setWatch(() => {
-		manualTest();
-	}, BTN4, {edge:"rising", debounce:50, repeat:true});
-	
+	assignButtons(0);
 	g.clear();
 	g.flip();
 	g.setFont8x12();
@@ -106,11 +160,7 @@ function mainScreen() {
 }
 
 function autoTestScreen() {
-	//buttons
-	setWatch(() => {
-		manualTest();
-	}, BTN4, {edge:"rising", debounce:50, repeat:true});
-	
+	assignButtons(0);
 	g.clear();
 	g.setFont8x12();
 	g.drawString("Auto Network Test",10,0);						//CHECK
@@ -119,29 +169,14 @@ function autoTestScreen() {
 	g.drawString("Carrier Name: ",2,22);
 	g.drawString(carrier_id[selected_carrier],70,12);
 	g.drawString(carrier_name[selected_carrier],70,22);
+	g.setFontBitmap();
+	g.drawString("BTN4 - change to manual testing",1,52);
+	g.drawString("(after network scan)",1,58);
 	g.flip();
 }
 
 function manualTestScreen() {
-	//buttons
-	setWatch(() => {
-		autoTest();
-	}, BTN4, {edge:"rising", debounce:50, repeat:true});
-	
-	setWatch(() => {	//change selected carrier and update display
-		cycleCarrier();
-		g.setFont6x8();
-		g.setColor(0);
-		g.fillRect(70,10,127,32);								//CHECK
-		g.drawString(carrier_id[selected_carrier],70,12);
-		g.drawString(carrier_name[selected_carrier],70,22);
-		g.flip();
-	}, BTN2, {edge:"rising", debounce:50, repeat:true});
-	
-	setWatch(() => {
-		bandSelectScreen();
-	}, BTN3, {edge:"rising", debounce:50, repeat:true});
-		
+	assignButtons(1);		
 	g.clear();
 	g.setFont8x12();
 	g.drawString("Manual Network Test",1,0);					//CHECK
@@ -157,29 +192,13 @@ function manualTestScreen() {
 }
 
 function bandSelectScreen() {
-	setWatch(() => {
-		autoTest();
-	}, BTN4, {edge:"rising", debounce:50, repeat:true});
-	
-	setWatch(() => {	//change selected carrier and update display
-		cycleBand();
-		g.setFont6x8();
-		g.setColor(0);
-		g.fillRect(70,30,127,42);									//CHECK
-		g.drawString(LTE_BANDS[selected_lte],70,32); 				//CHECK
-		g.flip();
-	}, BTN2, {edge:"rising", debounce:50, repeat:true});
-	
-	setWatch(() => {
-		startManualTest();
-	}, BTN3, {edge:"rising", debounce:50, repeat:true});
-		
-	g.clear();
-	g.setFont8x12();
-	g.drawString("Manual Network Test",1,0);					//CHECK
+	assignButtons(2);
+	g.setColor(0);
+	g.fillRect(0,40,127,63);
+	g.setColor(1);
 	g.setFont6x8();
 	g.drawString("Band: ",2,32);
-	g.drawString(LTE_BANDS[selected_lte],70,32);
+	g.drawString(LTE_NAMES[selected_lte],70,32);
 	g.setFontBitmap();
 	g.drawString("BTN2 - cycle band",1,50);
 	g.drawString("BTN3 - start test",1,56);
@@ -235,6 +254,9 @@ function scanCarriers() {
 	return new Promise((resolve) => {
 		setTimeout(() => resolve(), 2000);
 	})
+	.then(() => {
+		scan_result = "";
+	})
 	.then(() => sendAtCommand('AT+CFUN=1'))					//set radio to transmit
 	.then(() => {
 		scan_result = sendAtCommand('AT+COPS=?');			//scan for all available carriers
@@ -244,7 +266,7 @@ function scanCarriers() {
 	});
 }
 
-function parseScanResult() {
+function parseScanResult(is_manual_test) {
 	return new Promise((resolve) => {
 		setTimeout(() => resolve(), 1000);
 	})
@@ -281,6 +303,10 @@ function parseScanResult() {
 				
 				break; 														// TODO - remove and test with multiple carriers 
 			}
+			if (update_after_scan == 1) {			// TODO - fix bad screen updates
+				autoTestScreen();				//only called on auto test update - manual has its own method
+				update_after_scan = 0;
+			}
 		}
 	});
 }
@@ -294,6 +320,7 @@ function connectModem(carrier) {	//requires operator in numeric format
 }
 
 function autoTest() {
+	update_after_scan = 1;
 	autoTestScreen();
 	resetModem()
 	.then(() => configureModem(LTE_BANDS[selected_lte]))
@@ -308,24 +335,17 @@ function autoTest() {
 }
 
 function manualTest() {
-	clearWatch();
+	clearButtons();
 	g.clear();
 	g.setFont8x12();
-	g.drawString("Scanning...",30,30);
+	g.drawString("Preparing...",32,26);
 	g.flip();
 	resetModem()
-	.then(() => configureModem(selected_lte))
-	.then(() => {
-		if (scan_successful == 1) {
-			scanCarriers()
-			.then(() => parseScanResult());
-		}
-	})
 	.then(() => manualTestScreen());
 }
 
 function startManualTest() {
-	configureModem(selected_lte)
+	configureModem(LTE_BANDS[selected_lte])
 	.then(() => g.setFontBitmap())
 	.then(() => g.drawString("Connecting to " + carrier_name[selected_carrier],2,40))
 	.then(() => g.flip())
@@ -348,10 +368,8 @@ function onInit() {
 	if (debug) {
 		at.debug(true);
 	}
-	//universal buttons configuration - TOP LEFT CCW - 1,2,3,4
-	setWatch(() => {
-		toggleBacklight();
-	}, BTN1, {edge:"rising", debounce:50, repeat: true});
+	
+	assignButtons(0);
 	
 	//main 
 	startupScreen();
