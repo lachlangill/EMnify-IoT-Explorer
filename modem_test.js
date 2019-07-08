@@ -2,6 +2,18 @@
 // testing device endpoint name - nbpi4 - lachlan
 // 10.192.200.12
 
+//TO ADD
+// - EDRX test
+// - manual test + control buttons
+// - multiple carrier auto test
+// - new LTE array and names
+
+//BUTTONS CONFIG
+// 1 - backlight toggleBacklight
+// 2 - manual/auto test toggle
+// 3 - start manual test/advance through selection parameters
+// 4 - cycle test parameters
+
 //----- VARIABLES -----//
 var debug = true; //change to false when finished
 
@@ -14,7 +26,6 @@ var visible_catm_networks = [];
 var visible_nb_networks = [];
 var scan_result = "";
 var scan_successful = 0;
-var selected_carrier = 0;
 
 //LTE bands
 var LTE_B1 = "1";
@@ -35,6 +46,12 @@ var LTE_CATM1_ANY = "400A0E189F";
 var LTE_CATNB1_ANY = "A0E189F";
 var LTE_NO_CHANGE = "0";
 
+var LTE_BANDS = ["1","2","4","8","10","80","800","1000","20000","40000","80000","2000000","8000000","4000000000","400A0E189F","A0E189F","0"];
+var LTE_NAMES = ["B1","B2","B3","B4","B5","B8","B12","B13","B18","B19","B20","B26","B28","B39","CATM1_ANY","CATNB1_ANY","NO_CHANGE"];
+
+var selected_lte = 15;
+var selected_carrier = 0;
+
 require("Font6x8").add(Graphics);
 require("Font8x12").add(Graphics);
 
@@ -47,7 +64,14 @@ function toggleBacklight() {
 function cycleCarrier() {
 	selected_carrier += 1;
 	if (carrier_id[selected_carrier] == null) {
-		carrier_id = 0;
+		selected_carrier = 0;
+	}
+}
+
+function cycleBand() {
+	selected_lte += 1;
+	if (LTE_BANDS[selected_lte] == "0") {
+		selected_lte = 0;
 	}
 }
 
@@ -60,12 +84,17 @@ function startupScreen() {
 	g.fillRect(35,32,91,46);
 	g.setFont6x8();
 	g.setColor(1);
-	g.drawString("EM" + italics("nify") + "IoT", 41,36);
+	g.drawString("EMnify IoT", 41,36);
 	g.flip();
 	setTimeout(function() {mainScreen();}, 3000);
 }
 
 function mainScreen() {
+	//buttons
+	setWatch(() => {
+		manualTest();
+	}, BTN4, {edge:"rising", debounce:50, repeat:true});
+	
 	g.clear();
 	g.flip();
 	g.setFont8x12();
@@ -77,9 +106,14 @@ function mainScreen() {
 }
 
 function autoTestScreen() {
+	//buttons
+	setWatch(() => {
+		manualTest();
+	}, BTN4, {edge:"rising", debounce:50, repeat:true});
+	
 	g.clear();
 	g.setFont8x12();
-	g.drawString("Network Test",30,0);
+	g.drawString("Auto Network Test",10,0);						//CHECK
 	g.setFont6x8();
 	g.drawString("Carrier ID: ",2,12);
 	g.drawString("Carrier Name: ",2,22);
@@ -88,11 +122,67 @@ function autoTestScreen() {
 	g.flip();
 }
 
-function loadingIcon(count) {
-	g.setColor(0);
-	g.fillRect(115,51,127,63);
-	g.setColor(1);
-	g.drawLine(117+((count%20)),53, 117-((count%20)),61);
+function manualTestScreen() {
+	//buttons
+	setWatch(() => {
+		autoTest();
+	}, BTN4, {edge:"rising", debounce:50, repeat:true});
+	
+	setWatch(() => {	//change selected carrier and update display
+		cycleCarrier();
+		g.setFont6x8();
+		g.setColor(0);
+		g.fillRect(70,10,127,32);								//CHECK
+		g.drawString(carrier_id[selected_carrier],70,12);
+		g.drawString(carrier_name[selected_carrier],70,22);
+		g.flip();
+	}, BTN2, {edge:"rising", debounce:50, repeat:true});
+	
+	setWatch(() => {
+		bandSelectScreen();
+	}, BTN3, {edge:"rising", debounce:50, repeat:true});
+		
+	g.clear();
+	g.setFont8x12();
+	g.drawString("Manual Network Test",1,0);					//CHECK
+	g.setFont6x8();
+	g.drawString("Carrier ID: ",2,12);
+	g.drawString("Carrier Name: ",2,22);
+	g.drawString(carrier_id[selected_carrier],70,12);
+	g.drawString(carrier_name[selected_carrier],70,22);
+	g.setFontBitmap();
+	g.drawString("BTN2 - cycle carrier",1,50);
+	g.drawString("BTN3 - select band",1,56);
+	g.flip();
+}
+
+function bandSelectScreen() {
+	setWatch(() => {
+		autoTest();
+	}, BTN4, {edge:"rising", debounce:50, repeat:true});
+	
+	setWatch(() => {	//change selected carrier and update display
+		cycleBand();
+		g.setFont6x8();
+		g.setColor(0);
+		g.fillRect(70,30,127,42);									//CHECK
+		g.drawString(LTE_BANDS[selected_lte],70,32); 				//CHECK
+		g.flip();
+	}, BTN2, {edge:"rising", debounce:50, repeat:true});
+	
+	setWatch(() => {
+		startManualTest();
+	}, BTN3, {edge:"rising", debounce:50, repeat:true});
+		
+	g.clear();
+	g.setFont8x12();
+	g.drawString("Manual Network Test",1,0);					//CHECK
+	g.setFont6x8();
+	g.drawString("Band: ",2,32);
+	g.drawString(LTE_BANDS[selected_lte],70,32);
+	g.setFontBitmap();
+	g.drawString("BTN2 - cycle band",1,50);
+	g.drawString("BTN3 - start test",1,56);
 	g.flip();
 }
 
@@ -159,7 +249,7 @@ function parseScanResult() {
 		setTimeout(() => resolve(), 1000);
 	})
 	.then(() => {
-		var scan_successful = 1; 							//assume scan is successful - changed to zero if no results are returned
+		scan_successful = 1; 							//assume scan is successful - changed to zero if no results are returned
 		console.log("scan_result = " + scan_result);
 		var temp = JSON.stringify(scan_result);
 		console.log("stringify temp = " + temp);
@@ -195,8 +285,7 @@ function parseScanResult() {
 	});
 }
 
-function connectModem(carrier) {
-	//requires operator in numeric format
+function connectModem(carrier) {	//requires operator in numeric format
 	sendAtCommand('AT+CGDCONT=1,\"IP\",\"em\",,')						//connection details - em for emnify apn
 	.then(() => sendAtCommand('AT+CFUN=1'))								//turn on modem transmitter
 	.then(() => sendAtCommand('AT+QGPS=1'))								//turn on GNSS
@@ -207,7 +296,7 @@ function connectModem(carrier) {
 function autoTest() {
 	autoTestScreen();
 	resetModem()
-	.then(() => configureModem(LTE_CATM1_ANY))
+	.then(() => configureModem(LTE_BANDS[selected_lte]))
 	.then(() => g.setFontBitmap())
 	.then(() => g.drawString("Waiting for carrier discovery...",2,40))
 	.then(() => g.flip())
@@ -219,7 +308,29 @@ function autoTest() {
 }
 
 function manualTest() {
-	// TODO
+	clearWatch();
+	g.clear();
+	g.setFont8x12();
+	g.drawString("Scanning...",30,30);
+	g.flip();
+	resetModem()
+	.then(() => configureModem(selected_lte))
+	.then(() => {
+		if (scan_successful == 1) {
+			scanCarriers()
+			.then(() => parseScanResult());
+		}
+	})
+	.then(() => manualTestScreen());
+}
+
+function startManualTest() {
+	configureModem(selected_lte)
+	.then(() => g.setFontBitmap())
+	.then(() => g.drawString("Connecting to " + carrier_name[selected_carrier],2,40))
+	.then(() => g.flip())
+	.then(() => connectModem(carrier_id[selected_carrier]));
+	
 }
 
 //----- MAIN FUNCTION -----//
@@ -237,10 +348,11 @@ function onInit() {
 	if (debug) {
 		at.debug(true);
 	}
-	//buttons configuration
+	//universal buttons configuration - TOP LEFT CCW - 1,2,3,4
 	setWatch(() => {
 		toggleBacklight();
 	}, BTN1, {edge:"rising", debounce:50, repeat: true});
+	
 	//main 
 	startupScreen();
 	setTimeout(function() {autoTest();}, 5000);
