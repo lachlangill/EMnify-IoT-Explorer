@@ -19,6 +19,7 @@ var visible_gsm_networks = [];
 var visible_catm_networks = [];
 var visible_nb_networks = []; //these are populated by the scanCarriers() function
 var scan_result = "";
+var scan_successful = 0;
 var selected_carrier = 0;
 
 //LTE bands
@@ -72,12 +73,12 @@ function mainScreen() {
 	g.setFont8x12();
 	g.drawString("Main Screen",30,0);
 	g.setFontBitmap();
-	/* g.drawString("Configuring modem for", 1,30);
-	g.drawString("automatic test...", 1,36); */
+	g.drawString("Automatic test will start...", 1,30);
+	//g.drawString("automatic test...", 1,36);
 	g.flip();
 }
 
-function testScreen() {
+function autoTestScreen() {
 	g.clear();
 	g.setFont8x12();
 	g.drawString("Network Test",30,0);
@@ -86,6 +87,7 @@ function testScreen() {
 	g.drawString("Carrier Name: ",2,22);
 	g.drawString(carrier_id[selected_carrier],70,12);
 	g.drawString(carrier_name[selected_carrier],70,22);
+	g.flip();
 }
 
 function loadingIcon(count) {
@@ -116,62 +118,90 @@ sendAtCommand = function (command, timeoutMs, waitForLine) {
 };
 
 function resetModem() {
-	sendAtCommand('AT&F0')										//factory reset
+	return new Promise((resolve) => {
+		setTimeout(() => resolve(), 1000);
+	})
+	.then(() => sendAtCommand('AT&F0'))							//factory reset
 	.then(() => sendAtCommand('ATE0'))							//command echo off
-	.then(() => sendAtCommand('AT+CPIN?'));						//check if sim is locked/not present
+	.then(() => sendAtCommand('AT+CPIN?'))						//check if sim is locked/not present
+	.catch((err) => {
+		console.log('catch', err);
+	});
 }
 
 function configureModem(lte_band) {
-	sendAtCommand('AT+CFUN=4')												//turn modem transmitter to airplane mode to reconfigure	
+	return new Promise((resolve) => {
+		setTimeout(() => resolve(), 1000);
+	})
+	.then(() => sendAtCommand('AT+CFUN=4'))									//turn modem transmitter to airplane mode to reconfigure
 	//.then(() => sendAtCommand('AT+QGPSEND'))								//disable GNSS
 	.then(() => sendAtCommand('AT+QCFG=\"band\",0,' + lte_band + ',0'))		//config for specified band
 	.then(() => sendAtCommand('AT+QCFG=\"nwscanseq\",02,1'))				//network scan sequence - 02=CAT-M
 	.then(() => sendAtCommand('AT+QCFG=\"nwscanmode\",3,1'))				//scan mode - CAT-M
 	.then(() => sendAtCommand('AT+QCFG=\"iotopmode\",0,1'))					//IoT search mode - 0=CAT-M only, 2=CAT-M and NBIoT
-	.then(() => sendAtCommand('AT+QCFG=\"servicedomain\",1,1'));				//service domain - PS only
-	
+	.then(() => sendAtCommand('AT+QCFG=\"servicedomain\",1,1'))				//service domain - PS only
+	.catch((err) => {
+		console.log('catch', err);
+	});
 }
 
-function scanCarriers() {
-	//TODO - AT+COPS=?
-	sendAtCommand('AT+CFUN=1');
-	scan_result = sendAtCommand('AT+COPS=?'); 
+function scanCarriers() {	
+	return new Promise((resolve) => {
+		setTimeout(() => resolve(), 2000);
+	})
+	.then(() => sendAtCommand('AT+CFUN=1'))								//set radio to transmit
+	.then(() => {
+		scan_result = sendAtCommand('AT+COPS=?');
+	})
+	.catch((err) => {
+		console.log('catch', err);
+	});
 }
 
 function parseScanResult() {
-	console.log("scan_result = " + scan_result);
-	var temp = JSON.stringify(scan_result);
-	console.log("stringify temp = " + temp);
-	var num = temp.indexOf("("); //find start of results
-	if (num == -1) {											//auto rescan if no carriers are found
-		console.log("No carriers found. Rescanning...");
-		scanCarriers();
-		setTimeout(function() {parseScanResult();}, 5000);
-	}
-	console.log("num = " + num);
-	temp = temp.slice(num, -1); // remove junk from start of scan results
-	console.log("slice temp = " + temp);
-	temp = temp.split(",");
 	
-	var iteration = 0;
-	var x1; // carrier index number from scan
-	var x2; // long carrier name
-	var x3; // short carrier name
-	var x4; // location that holds the carrier number
-	var temp_id;
-	
-	while (true) {
-		
-		temp_id = temp[iteration + 3];
-		carrier_id[iteration] = temp_id.slice(2,-2); // WORKING FOR ONE CARRIER
-		temp_name = temp[iteration + 1];
-		carrier_name[iteration] = temp_name.slice(2,-2);
-		console.log("carrier ID = " + carrier_id[iteration]);
-		console.log("carrier name = " + carrier_name[iteration]);
-		
-		break; // TODO - remove and test with multiple carriers 
-	
-	}
+	return new Promise((resolve) => {
+		setTimeout(() => resolve(), 1000);
+	})
+	.then(() => {
+		var scan_successful = 1; 							//assume scan is successful - changed to zero if no results are returned
+		console.log("scan_result = " + scan_result);
+		var temp = JSON.stringify(scan_result);
+		console.log("stringify temp = " + temp);
+		var num = temp.indexOf("("); //find start of results
+		if (num == -1) {		//auto rescan if no carriers are found
+			scan_successful = 0;
+			console.log("No carriers found. Rescanning...");
+			scanCarriers();
+			setTimeout(function() {parseScanResult();}, 5000);
+		}
+		if (scan_successful == 1) {		// scan returned results
+			
+			console.log("num = " + num);
+			temp = temp.slice(num, -1); // remove junk from start of scan results
+			console.log("slice temp = " + temp);
+			temp = temp.split(",");
+			
+			var iteration = 0;
+			var x1; // carrier index number from scan
+			var x2; // long carrier name
+			var x3; // short carrier name
+			var x4; // location that holds the carrier number
+			var temp_id;
+			
+			while (true) {
+				
+				temp_id = temp[iteration + 3];
+				carrier_id[iteration] = temp_id.slice(2,-2); // WORKING FOR ONE CARRIER
+				temp_name = temp[iteration + 1];
+				carrier_name[iteration] = temp_name.slice(2,-2);
+				console.log("carrier ID = " + carrier_id[iteration]);
+				console.log("carrier name = " + carrier_name[iteration]);
+				
+				break; // TODO - remove and test with multiple carriers 
+			}
+		}
+	});
 }
 
 function connectModem(carrier) {
@@ -183,7 +213,7 @@ function connectModem(carrier) {
 	.then(() => sendAtCommand('AT+COPS=1,2,' + carrier + ',8', 5000));	//8 - CAT-M
 }
 
-function autoTest() {
+/* function autoTestOLD() { // OLD - not used anymore
 	testScreen();
 	//reset and scan for carriers
 	resetModem();
@@ -207,10 +237,10 @@ function autoTest() {
 	setTimeout(function() {connectModem(carrier_id[0]);}, 5000);
 	setTimeout(function() {console.log("connecting to operator");}, 5000);
 	
-}
+} */
 
-function autoTestTEMP() {
-	testScreen();
+function autoTest() {
+	autoTestScreen();
 	//reset and scan for carriers
 	resetModem()
 	.then(() => configureModem(LTE_CATM1_ANY))
@@ -219,9 +249,9 @@ function autoTestTEMP() {
 	.then(() => g.drawString("Waiting for carrier discovery...",2,40))
 	.then(() => g.flip())
 	.then(() => parseScanResult())
-	.then(() => testScreen()) //redraw after successful parse of scan
-	.then(() => connectModem(carrier_id[0]))
-	.then(() => console.log("connecting to operator"));
+	.then(() => autoTestScreen()); //redraw after successful parse of scan
+	//.then(() => connectModem(carrier_id[0])) 		// work out a method to set a boolean then connect and test
+	//.then(() => console.log("connecting to operator"));
 	
 }
 
@@ -248,7 +278,7 @@ function onInit() {
 	digitalWrite(LED1,backlight); // turn on backlight
 	
 	startupScreen();
-	setTimeout(function() {autoTestTEMP();}, 5000);
+	setTimeout(function() {autoTest();}, 5000);
 	
 }
 onInit(); //auto run during dev
