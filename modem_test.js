@@ -5,7 +5,7 @@
 // TO ADD
 // - consolidate modem config functions - DONE
 // - testing method and results quantification
-// - fix scan result parsing - mostly done
+// - fix scan result parsing - need to work out how to terminate loop
 // - EDRX testing
 // - fix manual test scan/starting + control buttons - mostly done
 // - multiple carrier and band auto test - mostly done
@@ -39,10 +39,10 @@ var update_after_scan = 0;
 var selected_lte = 14;
 var selected_carrier = 0;
 var selected_type = 0;
-var selected_mode = 0; //connection type - 1: all, 2: GSM, 3: CAT-M, 4: NB-IoT
+var selected_mode = 0; //connection type - 0: all, 1: GSM, 2: CAT-M, 3: NB-IoT
 
 //----- CONSTANTS -----//
-var AUTOSCAN_DEFAULT = 3; //change here if required
+var AUTOSCAN_DEFAULT = 2; //change here if required
 
 //LTE bands
 var LTE_B1 = "1";
@@ -69,17 +69,15 @@ var LTE_NAMES = ["B1","B2","B3","B4","B5","B8","B12","B13","B18","B19","B20","B2
 var CONNECTION_NAMES = ["GSM","CAT-M1","NB-IoT"];
 var CONNECTION_TYPES = [0,8,9];
 
-var scan_duration = [150000,45000,30000,45000]; // duration for network scans
+var scan_duration = [150000,45000,30000,30000]; // duration for network scans
 var MODE_NAMES = ["Auto","GSM","CAT-M1","NB-IoT"];
 
 					//GSM,   CATM,	  NBIoT,	scanseq, scanmode,iotopmode
 var MODE_VALUES = [	['F','400A0E189F','A0E189F','020301','0','2'], //automatic mode
-					['F',	'0',		'0',	'01',	,'1','2'], //GSM only
+					['F',	'0',		'0',	'01'	,'1','2'], //GSM only
 					['0','400A0E189F',	'0',	'02'	,'3','0'], //CAT-M only
 					['0','0',			'0',	'03'	,'3','1']];//NB-IoT only
 
-
-					
 require("Font4x4").add(Graphics);
 require("Font6x8").add(Graphics);
 require("Font8x12").add(Graphics);
@@ -135,7 +133,7 @@ function assignButtons(current_screen) {	//button configuration - TOP LEFT CCW -
 			g.setColor(1);
 			g.drawString(carrier_id[selected_carrier],56,12);
 			g.drawString(carrier_name[selected_carrier],56,22);
-			g.drawString(carrier_type[selected_carrier],56,32);
+			g.drawString(carrier_type[selected_carrier] == 0 ? CONNECTION_NAMES[selected_carrier] : CONNECTION_NAMES[carrier_type[selected_carrier] - 7],56,32);
 			g.flip();
 		}, BTN2, {edge:"rising", debounce:50, repeat:true});
 		setWatch(() => {
@@ -168,7 +166,7 @@ function assignButtons(current_screen) {	//button configuration - TOP LEFT CCW -
 			g.setColor(1);
 			g.drawString(carrier_id[selected_carrier],56,12);
 			g.drawString(carrier_name[selected_carrier],56,22);
-			g.drawString(carrier_type[selected_carrier],56,32);
+			g.drawString(carrier_type[selected_carrier] == 0 ? CONNECTION_NAMES[selected_carrier] : CONNECTION_NAMES[carrier_type[selected_carrier] - 7],56,32);
 			g.flip();
 		}, BTN2, {edge:"rising", debounce:50, repeat:true});
 		setWatch(() => {
@@ -238,7 +236,7 @@ function autoTestScreen() {
 	g.drawString("Connection: ", 2,32);
 	g.drawString(carrier_id[selected_carrier],56,12);
 	g.drawString(carrier_name[selected_carrier],56,22);
-	g.drawString(carrier_type[selected_carrier],56,32); 			//FIX
+	g.drawString(carrier_type[selected_carrier] == 0 ? CONNECTION_NAMES[selected_carrier] : CONNECTION_NAMES[carrier_type[selected_carrier] - 7],56,32);
 	g.setFontBitmap();
 	g.drawString("BTN4 - change to manual testing",1,57);
 	//g.drawString("after network scan",1,59);
@@ -270,7 +268,7 @@ function manualTestScreen() {
 	g.drawString("Connection: ", 2,32);
 	g.drawString(carrier_id[selected_carrier],56,12);
 	g.drawString(carrier_name[selected_carrier],56,22);
-	g.drawString(carrier_type[selected_carrier],56,32); 			//FIX
+	g.drawString(carrier_type[selected_carrier] == 0 ? CONNECTION_NAMES[selected_carrier] : CONNECTION_NAMES[carrier_type[selected_carrier] - 7],56,32);
 	g.setFontBitmap();
 	g.drawString("BTN2 - cycle carrier",1,53);
 	g.drawString("BTN3 - select band",1,59);
@@ -410,7 +408,7 @@ function parseScanResult(timeout) {
 }
 //TODO - change to add connection type
 function connectModem(carrier,type) {	//requires operator in numeric format
-	sendAtCommand('AT+CGDCONT=1,\"IP\",\"em\",,')						//connection details - em for emnify apn
+	sendAtCommand('AT+CGDCONT=1,\"IP\",\"iot.1nce.net\",,')						//connection details - em for emnify apn, iot.1nce.net for 1nce
 	.then(() => sendAtCommand('AT+CFUN=1'))								//turn on modem transmitter
 	.then(() => sendAtCommand('AT+QGPS=1'))								//turn on GNSS
 	.then(() => sendAtCommand('AT+CEREG=2'))							//register to network
@@ -421,12 +419,15 @@ function autoTest() {
 	update_after_scan = 1;
 	selected_mode = AUTOSCAN_DEFAULT;			//autoscan default
 	autoTestScreen();
-	resetModem()
-	.then(() => configureModem(selected_mode)) // 0 - automatic mode
+	configureModem(selected_mode) // 0 - automatic mode
 	.then(() => g.setFontBitmap())
 	.then(() => g.drawString("Scanning for carriers...",2,42))
 	.then(() => g.flip())
-	.then(() => scanCarriers())
+	.then(() => {
+		if (scan_successful == 0) {
+			scanCarriers();
+		}
+	})
 	.then(() => autoTestScreen())
 	.then(() => {
 		assignButtons(3);
@@ -439,7 +440,6 @@ function manualTest() {
 	g.setFont8x12();
 	g.drawString("Preparing...",32,26);
 	g.flip();
-	resetModem();
 	modeSelectScreen();
 }
 
@@ -485,10 +485,10 @@ function onInit() {
 	assignButtons(0);
 	digitalWrite(LED1, backlight);
 	
-	sendAtCommand('AT+CMEE=2');			//verbose error logging
+	//sendAtCommand('AT+CMEE=2');			//verbose error logging
 	
 	startupScreen();
-	
+	resetModem();
 	setTimeout(function() {autoTest();}, 5000);
 	
 }
