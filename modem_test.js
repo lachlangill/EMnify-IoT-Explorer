@@ -2,17 +2,22 @@
 // testing device endpoint name: nbpi4 - lachlan
 // 10.192.200.12
 
-// TO ADD
-// - consolidate modem config functions - DONE
-// - testing method and results quantification
-// - fix scan result parsing - need to work out how to terminate loop
+// TO DO
+// - connect to carrier
+// - connection strength and details
+	/* AT+CSQ - connection strength quality
+	AT+QSCON - signaling connection status
+	AT+QNWINFO - query network information
+	AT+QSCQ - query and report signal strength	
+	*/
 // - EDRX and PSM testing
-// - fix manual test scan/starting + control buttons - mostly done
-// - multiple carrier and band auto test - mostly done
 // - power draw/battery level
+// - testing method and results quantification
 
-// OPTIONAL
-// - condense small IF statements with ternary operator
+// TO FIX
+// - fix scan result parsing - need to work out how to terminate loop
+// - fix manual test scan/starting + control buttons - remove band select, add band value to information collection -> AT+QNWINFO
+
 
 //BUTTONS CONFIG
 // 1 - backlight toggle
@@ -28,9 +33,6 @@ var backlight = true;
 var carrier_id = [];
 var carrier_name = [];		//could combine into 2d array
 var carrier_type = [];
-/* var visible_gsm_networks = []; // 3 are currently unused - may implement
-var visible_catm_networks = []; 
-var visible_nb_networks = []; */
 var scan_result = "";
 var scan_successful = 0;
 var is_manual_test = 0;
@@ -43,8 +45,6 @@ var selected_mode = 0; //connection type - 0: all, 1: GSM, 2: CAT-M, 3: NB-IoT
 
 //----- CONSTANTS -----//
 var AUTOSCAN_DEFAULT = 2; //change here if required
-
-var RI_PIN = 'D2';
 
 //LTE bands
 var LTE_B1 = "1";
@@ -71,17 +71,16 @@ var LTE_NAMES = ["B1","B2","B3","B4","B5","B8","B12","B13","B18","B19","B20","B2
 var CONNECTION_NAMES = ["GSM","CAT-M1","NB-IoT"];
 var CONNECTION_TYPES = [0,8,9];
 
-var scan_duration = [150000,45000,30000,30000]; // duration for network scans
-var MODE_NAMES = ["Auto","GSM","CAT-M1","NB-IoT"];
 var MAX_SCAN_DURATION = 150000;
 
+var MODE_NAMES = ["Auto","GSM","CAT-M1","NB-IoT"];
 					//GSM,   CATM,	  NBIoT,	scanseq, scanmode,iotopmode
 var MODE_VALUES = [	['F','400A0E189F','A0E189F','020301','0','2'], //automatic mode
 					['F',	'0',		'0',	'01'	,'1','2'], //GSM only
 					['0','400A0E189F',	'0',	'02'	,'3','0'], //CAT-M only
 					['0','0',			'0',	'03'	,'3','1']];//NB-IoT only
 
-require("Font4x4").add(Graphics);
+//require("Font4x4").add(Graphics);
 require("Font6x8").add(Graphics);
 require("Font8x12").add(Graphics);
 
@@ -133,7 +132,8 @@ function assignButtons(current_screen) {	//button configuration - TOP LEFT CCW -
 			drawCarrierInfo();
 		}, BTN2, {edge:"rising", debounce:50, repeat:true});
 		setWatch(() => {
-			bandSelectScreen();
+			startManualTest();
+			//bandSelectScreen();
 		}, BTN3, {edge:"rising", debounce:50, repeat:true});
 	} 
 	else if (current_screen == 2) { 				// band select screen
@@ -144,9 +144,9 @@ function assignButtons(current_screen) {	//button configuration - TOP LEFT CCW -
 			cycleBand();
 			g.setFont6x8();
 			g.setColor(0);
-			g.fillRect(56,40,127,52);							//CHECK
+			g.fillRect(56,40,127,52);
 			g.setColor(1);
-			g.drawString(LTE_NAMES[selected_lte],56,42); 				//CHECK
+			g.drawString(LTE_NAMES[selected_lte],56,42);
 			g.flip();
 		}, BTN2, {edge:"rising", debounce:50, repeat:true});
 		setWatch(() => {
@@ -170,9 +170,9 @@ function assignButtons(current_screen) {	//button configuration - TOP LEFT CCW -
 			cycleMode();
 			g.setFont6x8();
 			g.setColor(0);
-			g.fillRect(48,16,127,32);							//CHECK
+			g.fillRect(48,16,127,32);
 			g.setColor(1);
-			g.drawString(MODE_NAMES[selected_mode],48,24); 				//CHECK
+			g.drawString(MODE_NAMES[selected_mode],48,24);
 			g.flip();
 		}, BTN2, {edge:"rising", debounce:50, repeat:true});
 		setWatch(() => {
@@ -192,11 +192,14 @@ function clearButtons() {
 function processDataInterrupt() {
 	Serial1.removeListener("data", processDataInterrupt);
 	parseScanResult();
+	if(scan_result == "CME ERROR: 3") {
+		console.log("Hard reset required.");
+	}
 	if (is_manual_test) {
-		setTimeout( function() { manualTestScreen();}, 100);
+		setTimeout( function() { manualTestScreen();}, 1200);
 	}
 	else {
-		setTimeout( function() { autoTestScreen();}, 100);
+		setTimeout( function() { autoTestScreen();}, 1200);
 	}
 }
 
@@ -229,7 +232,7 @@ function autoTestScreen() {
 	assignButtons(0);
 	g.clear();
 	g.setFont8x12();
-	g.drawString("Auto Network Test",10,0);						//CHECK
+	g.drawString("Auto Network Test",10,0);
 	drawCarrierInfo();
 	g.setFontBitmap();
 	g.drawString("BTN4 - change to manual testing",1,57);
@@ -240,10 +243,10 @@ function modeSelectScreen() {
 	assignButtons(4);
 	g.clear();
 	g.setFont8x12();
-	g.drawString("Manual Network Test",1,0);						//CHECK
+	g.drawString("Manual Network Test",1,0);
 	g.setFont6x8();
 	g.drawString("Mode: ",2,24);
-	g.drawString(MODE_NAMES[selected_mode],48,24);					//CHECK	
+	g.drawString(MODE_NAMES[selected_mode],48,24);
 	g.setFontBitmap();
 	g.drawString("BTN2 - cycle mode",1,53);
 	g.drawString("BTN3 - start scan",1,59);
@@ -254,7 +257,7 @@ function manualTestScreen() {
 	assignButtons(1);		
 	g.clear();
 	g.setFont8x12();
-	g.drawString("Manual Network Test",1,0);					//CHECK
+	g.drawString("Manual Network Test",1,0);
 	drawCarrierInfo();
 	g.setFontBitmap();
 	g.drawString("BTN2 - cycle carrier",1,53);
@@ -314,7 +317,6 @@ function resetModem() {
 	.then(() => sendAtCommand('AT&F0'))				//factory reset
 	.then(() => sendAtCommand('ATE0'))				//command echo off
 	.then(() => sendAtCommand('AT+CPIN?'))			//check if sim is locked/not present
-	//.then(() => sendAtCommand('AT+QCFG=\"urc/ri/other\",\"pulse\",200')) //not used
 	.catch((err) => {
 		console.log('catch', err);
 	});
@@ -371,7 +373,7 @@ function parseScanResult() {
 			g.fillRect(0,10,127,42);
 			g.setColor(1);
 			g.setFont6x8();
-			g.drawString("No carriers found.",2,22); 			//CHECK
+			g.drawString("No carriers found.",2,22);
 			g.flip();
 		}
 		else { 							//carriers are found - parse results
@@ -390,7 +392,9 @@ function parseScanResult() {
 			var temp_type;
 			
 			while (true) {
-				
+				if (temp[5*iteration] == null) {
+					break;
+				}
 				temp_id = temp[5*iteration + 3];
 				carrier_id[iteration] = temp_id.slice(2,-2);
 				temp_name = temp[5*iteration + 1];
@@ -402,21 +406,18 @@ function parseScanResult() {
 				console.log("carrier type = " + carrier_type[iteration]);
 				
 				iteration += 1;
-				
-				if (iteration == 6) {
-					break;		//need to fix
-				}
 			}
 		}
 	});
 }
+				
 //TODO - change to add connection type
 function connectModem(carrier,type) {	//requires operator in numeric format
 	sendAtCommand('AT+CGDCONT=1,\"IP\",\"em\",,')						//connection details - em for emnify apn, iot.1nce.net for 1nce
 	.then(() => sendAtCommand('AT+CFUN=1'))								//turn on modem transmitter
-	.then(() => sendAtCommand('AT+QGPS=1'))								//turn on GNSS
+	//.then(() => sendAtCommand('AT+QGPS=1'))								//turn on GNSS
 	.then(() => sendAtCommand('AT+CEREG=2'))							//register to network
-	.then(() => sendAtCommand('AT+COPS=1,2,' + carrier + ',' + type, 5000));	//0 - GSM, 8 - CAT-M, 9 - NB_IoT
+	.then(() => sendAtCommand('AT+COPS=1,2,' + carrier + ',' + type, 10000));	//0 - GSM, 8 - CAT-M, 9 - NB_IoT
 }
 
 function autoTest() {
