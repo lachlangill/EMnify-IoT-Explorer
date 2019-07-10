@@ -408,7 +408,7 @@ function parseScanResult(timeout) {
 }
 //TODO - change to add connection type
 function connectModem(carrier,type) {	//requires operator in numeric format
-	sendAtCommand('AT+CGDCONT=1,\"IP\",\"iot.1nce.net\",,')						//connection details - em for emnify apn, iot.1nce.net for 1nce
+	sendAtCommand('AT+CGDCONT=1,\"IP\",\"em\",,')						//connection details - em for emnify apn, iot.1nce.net for 1nce
 	.then(() => sendAtCommand('AT+CFUN=1'))								//turn on modem transmitter
 	.then(() => sendAtCommand('AT+QGPS=1'))								//turn on GNSS
 	.then(() => sendAtCommand('AT+CEREG=2'))							//register to network
