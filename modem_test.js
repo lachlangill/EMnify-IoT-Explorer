@@ -6,7 +6,7 @@
 // - consolidate modem config functions - DONE
 // - testing method and results quantification
 // - fix scan result parsing - need to work out how to terminate loop
-// - EDRX testing
+// - EDRX and PSM testing
 // - fix manual test scan/starting + control buttons - mostly done
 // - multiple carrier and band auto test - mostly done
 // - power draw/battery level
