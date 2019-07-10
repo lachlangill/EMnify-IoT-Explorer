@@ -33,7 +33,7 @@ var visible_catm_networks = [];
 var visible_nb_networks = []; */
 var scan_result = "";
 var scan_successful = 0;
-var update_after_scan = 0;
+var is_manual_test = 0;
 
 //manual test parameters
 var selected_lte = 14;
@@ -43,6 +43,8 @@ var selected_mode = 0; //connection type - 0: all, 1: GSM, 2: CAT-M, 3: NB-IoT
 
 //----- CONSTANTS -----//
 var AUTOSCAN_DEFAULT = 2; //change here if required
+
+var RI_PIN = 'D2';
 
 //LTE bands
 var LTE_B1 = "1";
@@ -71,6 +73,7 @@ var CONNECTION_TYPES = [0,8,9];
 
 var scan_duration = [150000,45000,30000,30000]; // duration for network scans
 var MODE_NAMES = ["Auto","GSM","CAT-M1","NB-IoT"];
+var MAX_SCAN_DURATION = 150000;
 
 					//GSM,   CATM,	  NBIoT,	scanseq, scanmode,iotopmode
 var MODE_VALUES = [	['F','400A0E189F','A0E189F','020301','0','2'], //automatic mode
@@ -127,14 +130,7 @@ function assignButtons(current_screen) {	//button configuration - TOP LEFT CCW -
 		}, BTN4, {edge:"rising", debounce:50, repeat:true});
 		setWatch(() => {
 			cycleCarrier();
-			g.setFont6x8();
-			g.setColor(0);
-			g.fillRect(56,10,127,42);								//CHECK
-			g.setColor(1);
-			g.drawString(carrier_id[selected_carrier],56,12);
-			g.drawString(carrier_name[selected_carrier],56,22);
-			g.drawString(carrier_type[selected_carrier] == 0 ? CONNECTION_NAMES[selected_carrier] : CONNECTION_NAMES[carrier_type[selected_carrier] - 7],56,32);
-			g.flip();
+			drawCarrierInfo();
 		}, BTN2, {edge:"rising", debounce:50, repeat:true});
 		setWatch(() => {
 			bandSelectScreen();
@@ -160,14 +156,7 @@ function assignButtons(current_screen) {	//button configuration - TOP LEFT CCW -
 	else if (current_screen == 3) {				// autotest results screen
 		setWatch(() => {
 			cycleCarrier();
-			g.setFont6x8();
-			g.setColor(0);
-			g.fillRect(56,10,127,42);								//CHECK
-			g.setColor(1);
-			g.drawString(carrier_id[selected_carrier],56,12);
-			g.drawString(carrier_name[selected_carrier],56,22);
-			g.drawString(carrier_type[selected_carrier] == 0 ? CONNECTION_NAMES[selected_carrier] : CONNECTION_NAMES[carrier_type[selected_carrier] - 7],56,32);
-			g.flip();
+			drawCarrierInfo();
 		}, BTN2, {edge:"rising", debounce:50, repeat:true});
 		setWatch(() => {
 			autoTest();
@@ -199,9 +188,20 @@ function clearButtons() {
 	clearWatch();
 }
 
+// interrupt handler for successful network scan
+function processDataInterrupt() {
+	Serial1.removeListener("data", processDataInterrupt);
+	parseScanResult();
+	if (is_manual_test) {
+		setTimeout( function() { manualTestScreen();}, 100);
+	}
+	else {
+		setTimeout( function() { autoTestScreen();}, 100);
+	}
+}
+
 //----- DISPLAY FUNCTIONS -----//
 function startupScreen() {
-	//(0,0) to (127.63) are legal boundaries
 	g.clear();
 	for (i=0;i<43;i+=3) g.drawLine(3*i,0,56+i,63); //fancy lines
 	g.setColor(0);
@@ -230,16 +230,9 @@ function autoTestScreen() {
 	g.clear();
 	g.setFont8x12();
 	g.drawString("Auto Network Test",10,0);						//CHECK
-	g.setFont6x8();
-	g.drawString("Carrier ID: ",2,12);
-	g.drawString("Name: ",2,22);
-	g.drawString("Connection: ", 2,32);
-	g.drawString(carrier_id[selected_carrier],56,12);
-	g.drawString(carrier_name[selected_carrier],56,22);
-	g.drawString(carrier_type[selected_carrier] == 0 ? CONNECTION_NAMES[selected_carrier] : CONNECTION_NAMES[carrier_type[selected_carrier] - 7],56,32);
+	drawCarrierInfo();
 	g.setFontBitmap();
 	g.drawString("BTN4 - change to manual testing",1,57);
-	//g.drawString("after network scan",1,59);
 	g.flip();
 }
 
@@ -262,13 +255,7 @@ function manualTestScreen() {
 	g.clear();
 	g.setFont8x12();
 	g.drawString("Manual Network Test",1,0);					//CHECK
-	g.setFont6x8();
-	g.drawString("Carrier ID: ",2,12);
-	g.drawString("Name: ",2,22);
-	g.drawString("Connection: ", 2,32);
-	g.drawString(carrier_id[selected_carrier],56,12);
-	g.drawString(carrier_name[selected_carrier],56,22);
-	g.drawString(carrier_type[selected_carrier] == 0 ? CONNECTION_NAMES[selected_carrier] : CONNECTION_NAMES[carrier_type[selected_carrier] - 7],56,32);
+	drawCarrierInfo();
 	g.setFontBitmap();
 	g.drawString("BTN2 - cycle carrier",1,53);
 	g.drawString("BTN3 - select band",1,59);
@@ -286,6 +273,20 @@ function bandSelectScreen() {
 	g.setFontBitmap();
 	g.drawString("BTN2 - cycle band",1,53);
 	g.drawString("BTN3 - start test",1,59);
+	g.flip();
+}
+
+function drawCarrierInfo() {
+	g.setFont6x8();
+	g.setColor(0);
+	g.fillRect(0,10,127,42);
+	g.setColor(1);
+	g.drawString("Carrier ID: ",2,12);
+	g.drawString("Name: ",2,22);
+	g.drawString("Connection: ", 2,32);
+	g.drawString(carrier_id[selected_carrier],56,12);
+	g.drawString(carrier_name[selected_carrier],56,22);
+	g.drawString(carrier_type[selected_carrier] == 0 ? CONNECTION_NAMES[carrier_type[selected_carrier]] : CONNECTION_NAMES[carrier_type[selected_carrier] - 7],56,32);
 	g.flip();
 }
 
@@ -313,6 +314,7 @@ function resetModem() {
 	.then(() => sendAtCommand('AT&F0'))				//factory reset
 	.then(() => sendAtCommand('ATE0'))				//command echo off
 	.then(() => sendAtCommand('AT+CPIN?'))			//check if sim is locked/not present
+	//.then(() => sendAtCommand('AT+QCFG=\"urc/ri/other\",\"pulse\",200')) //not used
 	.catch((err) => {
 		console.log('catch', err);
 	});
@@ -345,17 +347,17 @@ function scanCarriers() {
 	})
 	.then(() => sendAtCommand('AT+CFUN=1'))					//set radio to transmit
 	.then(() => {
-		scan_result = sendAtCommand('AT+COPS=?',scan_duration[selected_mode]);			//scan for all available carriers
+		scan_result = sendAtCommand('AT+COPS=?',MAX_SCAN_DURATION);			//scan for all available carriers
 	})
-	.then(() => parseScanResult(scan_duration[selected_mode]))
+	.then(() => Serial1.on("data", processDataInterrupt))
 	.catch((err) => {
 		console.log('catch', err);
 	});
 }
 
-function parseScanResult(timeout) {
+function parseScanResult() {
 	return new Promise((resolve) => {
-		setTimeout(() => resolve(), timeout);
+		setTimeout(() => resolve(), 1000);
 	})
 	.then(() => {
 		console.log("scan_result = " + scan_result);
@@ -365,6 +367,12 @@ function parseScanResult(timeout) {
 		
 		if (num == -1) {				//no carriers are found
 			console.log("No carriers found.");
+			g.setColor(0);
+			g.fillRect(0,10,127,42);
+			g.setColor(1);
+			g.setFont6x8();
+			g.drawString("No carriers found.",2,22); 			//CHECK
+			g.flip();
 		}
 		else { 							//carriers are found - parse results
 			scan_successful = 1;
@@ -396,12 +404,8 @@ function parseScanResult(timeout) {
 				iteration += 1;
 				
 				if (iteration == 6) {
-					break;		//need to change
+					break;		//need to fix
 				}
-			}
-			if (update_after_scan == 1) {			// TODO - fix bad screen updates
-				autoTestScreen();				//only called on auto test update - manual has its own method
-				update_after_scan = 0;
 			}
 		}
 	});
@@ -416,7 +420,7 @@ function connectModem(carrier,type) {	//requires operator in numeric format
 }
 
 function autoTest() {
-	update_after_scan = 1;
+	is_manual_test = 0;
 	selected_mode = AUTOSCAN_DEFAULT;			//autoscan default
 	autoTestScreen();
 	configureModem(selected_mode) // 0 - automatic mode
@@ -435,6 +439,7 @@ function autoTest() {
 }
 
 function manualTest() {
+	is_manual_test = 1;
 	clearButtons();
 	g.clear();
 	g.setFont8x12();
@@ -449,8 +454,7 @@ function manualTestScan() {
 	g.drawString("Scanning...",32,26);
 	g.flip();
 	configureModem(selected_mode)
-	.then(() => scanCarriers())
-	.then(() => setTimeout( function() { manualTestScreen();}, scan_duration[selected_mode]));
+	.then(() => scanCarriers());
 }
 
 function startManualTest() {
