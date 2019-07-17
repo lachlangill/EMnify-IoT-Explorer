@@ -2,22 +2,22 @@
 // testing device endpoint name: nbpi4 - lachlan
 // 10.192.200.12
 
-// TO DO
-// - connect to carrier
+// HIGH PRIORITY
+// - connect to carrier - auto/manual
 // - connection strength and details
 	/* AT+CSQ - connection strength quality
-	AT+QSCON - signaling connection status
-	AT+QNWINFO - query network information
-	AT+QSCQ - query and report signal strength	
+	AT+QNWINFO - query network information - technology/operator/band/channel
+	AT+QCSQ - query and report signal strength	
 	*/
+
+// TO DO
 // - EDRX and PSM testing
 // - power draw/battery level
 // - testing method and results quantification
 
 // TO FIX
-// - fix scan result parsing - need to work out how to terminate loop
 // - fix manual test scan/starting + control buttons - remove band select, add band value to information collection -> AT+QNWINFO
-
+// - combine 3 carrier arrays into 2d array
 
 //BUTTONS CONFIG
 // 1 - backlight toggle
@@ -36,6 +36,10 @@ var carrier_type = [];
 var scan_result = "";
 var scan_successful = 0;
 var is_manual_test = 0;
+
+//2d array used to store all data
+var connection_quality = [];
+//operator id, network type, band, channel, rssi, ber, sinr
 
 //manual test parameters
 var selected_lte = 14;
@@ -80,7 +84,7 @@ var MODE_VALUES = [	['F','400A0E189F','A0E189F','020301','0','2'], //automatic m
 					['0','400A0E189F',	'0',	'02'	,'3','0'], //CAT-M only
 					['0','0',			'0',	'03'	,'3','1']];//NB-IoT only
 
-//require("Font4x4").add(Graphics);
+require("Font4x4").add(Graphics);
 require("Font6x8").add(Graphics);
 require("Font8x12").add(Graphics);
 
@@ -133,7 +137,6 @@ function assignButtons(current_screen) {	//button configuration - TOP LEFT CCW -
 		}, BTN2, {edge:"rising", debounce:50, repeat:true});
 		setWatch(() => {
 			startManualTest();
-			//bandSelectScreen();
 		}, BTN3, {edge:"rising", debounce:50, repeat:true});
 	} 
 	else if (current_screen == 2) { 				// band select screen
@@ -181,6 +184,15 @@ function assignButtons(current_screen) {	//button configuration - TOP LEFT CCW -
 		setWatch(() => {
 			autoTest();
 		}, BTN4, {edge:"rising", debounce:50, repeat:true});
+	}
+	else if (current_screen == 5) {				//connected to carrier screen
+		setWatch(() => {
+			//placeholder
+		}, BTN2, {edge:"rising", debounce:50, repeat:true});
+		setWatch(() => {
+			disconnectModem()
+			.then(() => manualTestScreen());
+		}, BTN3, {edge:"rising", debounce:50, repeat:true});
 	}
 }
 
@@ -265,6 +277,32 @@ function manualTestScreen() {
 	g.flip();
 }
 
+//TODO - test
+function connectionScreen() {
+	g.clear();
+	g.setFont8x12();
+	g.drawString("Connection Details",2,0);
+	g.drawString("Connection Details",2,0);
+	g.setFont4x4();
+	g.drawString("Carrier ID: ",2,12);
+	g.drawString("Connection Type: ",2,18);
+	g.drawString("Band",2,24);
+	g.drawString("Channel ID",2,30);
+	g.drawString("Signal Strength: ",2,36);
+	g.drawString("dB",119,36); 							//CHECK
+	g.drawString("Bit Error Rate",2,42);
+	g.drawString("SNR",2,48);
+	g.drawString("dB",119,48); 							//CHECK
+	for (var i=0;i<7;i+=1) g.drawString(connection_quality[i], 80, 12 + (6 * i));		//CHECK
+	if (is_manual_test) {
+		assignButtons(5);
+		g.setFontBitmap();
+		g.drawString("BTN3 - disconnect from network",1,59); 		//CHECK
+	}
+	g.flip();
+}
+
+/* //TO REMOVE - NOT NEEDED
 function bandSelectScreen() {
 	assignButtons(2);
 	g.setColor(0);
@@ -277,7 +315,7 @@ function bandSelectScreen() {
 	g.drawString("BTN2 - cycle band",1,53);
 	g.drawString("BTN3 - start test",1,59);
 	g.flip();
-}
+} */
 
 function drawCarrierInfo() {
 	g.setFont6x8();
@@ -413,11 +451,54 @@ function parseScanResult() {
 				
 //TODO - change to add connection type
 function connectModem(carrier,type) {	//requires operator in numeric format
-	sendAtCommand('AT+CGDCONT=1,\"IP\",\"em\",,')						//connection details - em for emnify apn, iot.1nce.net for 1nce
+	sendAtCommand('AT+CGDCONT=1,\"IP\",\"em\",,')						//apn connection details - em for emnify, iot.1nce.net for 1nce
 	.then(() => sendAtCommand('AT+CFUN=1'))								//turn on modem transmitter
-	//.then(() => sendAtCommand('AT+QGPS=1'))								//turn on GNSS
-	.then(() => sendAtCommand('AT+CEREG=2'))							//register to network
+	.then(() => sendAtCommand('AT+CREG=2'))								//enable network registration (changed CEREG to CREG)
 	.then(() => sendAtCommand('AT+COPS=1,2,' + carrier + ',' + type, 10000));	//0 - GSM, 8 - CAT-M, 9 - NB_IoT
+}
+
+function disconnectModem() {
+	sendAtCommand('AT+COPS=2'); 			//TODO - CHECK IF WORKING
+}
+
+//TODO - get working
+function getNetworkDetails() {
+	var temp = sendAtCommand('AT+CSQ')					//signal strength (rssi), bit error rate (ber)
+	.then(() => {
+		//process results
+		temp = JSON.stringify(temp);
+		var num = temp.indexOf("+CSQ");
+		temp = temp.slice(num + 5, -1);		//CHECK VALUES
+		console.log("CSQ slice = " + temp);
+		temp = temp.split(",");
+		
+		connection_quality[4] = ( -113 + (2* temp[0])); //CHECK VALUES //rssi scaled to dB
+		connection_quality[5] = temp[1]; //ber
+	})
+	.then(() => {
+		temp = sendAtCommand('AT+QNWINFO');			//connection type (act), operator id (oper), current band (band), channel id (channel)
+		//process results
+		temp = JSON.stringify(temp);
+		var num = temp.indexOf("+QNWINFO");
+		temp = temp.slice(num + 9, -1);		//CHECK VALUES
+		console.log("QNWINFO slice = " + temp);
+		temp = temp.split(",");
+		
+		connection_quality[1] = temp[0]; //act
+		connection_quality[0] = temp[1]; //oper id
+		connection_quality[2] = temp[2]; //band
+		connection_quality[3] = temp[3]; //channel
+	})
+	.then(() => {
+		temp = sendAtCommand('AT+QCSQ');			//connection type (sysmode), signal strength (rssi), [lte only] reference signal received power(rsrp), signal to interference and noise (sinr), reference signal received quality (rsrq)
+		//process results - different for GSM vs LTE
+		temp = JSON.stringify(temp);
+		var num = temp.indexOf("+QCSQ");
+		temp = temp.slice(num + 6, -1);		//CHECK VALUES
+		console.log("QCSQ slice = " + temp);
+		temp = temp.split(",");
+		
+		connection_quality[6] = ((temp[3] / 5) - 20); //CHECK CONVERSION //sinr converted to dB
 }
 
 function autoTest() {
@@ -468,7 +549,9 @@ function startManualTest() {
 		g.drawString("Connecting to " + carrier_name[selected_carrier],2,57);
 		g.flip();
 	})
-	.then(() => connectModem(carrier_id[selected_carrier],carrier_type[selected_carrier]));
+	.then(() => connectModem(carrier_id[selected_carrier],carrier_type[selected_carrier]))
+	.then(() => getNetworkDetails())
+	.then(() => connectionScreen());
 }
 
 //----- MAIN FUNCTION -----//
