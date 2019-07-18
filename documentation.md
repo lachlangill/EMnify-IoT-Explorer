@@ -30,7 +30,7 @@ Name|Espruino Pixl.js
 Display|128x64 monocolour, 54 mm diagonal
 Backlight|Yes, white LED
 Supply voltage (Vin)|3 – 16 V (min – max)
-Maximum current draw (I¬max¬¬)|12 mA (with NFC/Bluetooth scanning)
+Maximum current draw (Imax)|12 mA (with NFC/Bluetooth scanning)
 Memory|64 kB RAM, 512 kB Flash
 
 ### Network Modem and Shield
