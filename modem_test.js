@@ -101,12 +101,12 @@ function cycleCarrier() {
 	}
 }
 
-function cycleBand() {
+/* function cycleBand() { // probably not needed for current test method
 	selected_lte += 1;
 	if (LTE_BANDS[selected_lte] == "0") {
 		selected_lte = 0;
 	}
-}
+} */
 
 function cycleMode() {
 	selected_mode += 1;
@@ -139,7 +139,7 @@ function assignButtons(current_screen) {	//button configuration - TOP LEFT CCW -
 			startManualTest();
 		}, BTN3, {edge:"rising", debounce:50, repeat:true});
 	} 
-	else if (current_screen == 2) { 				// band select screen
+	/* else if (current_screen == 2) { 				// band select screen - TO REMOVE - not needed for current testing method
 		setWatch(() => {
 			autoTest();
 		}, BTN4, {edge:"rising", debounce:50, repeat:true});
@@ -155,7 +155,7 @@ function assignButtons(current_screen) {	//button configuration - TOP LEFT CCW -
 		setWatch(() => {
 			startManualTest();									//TODO - get working
 		}, BTN3, {edge:"rising", debounce:50, repeat:true});
-	} 
+	}  */
 	else if (current_screen == 3) {				// autotest results screen
 		setWatch(() => {
 			cycleCarrier();
@@ -273,7 +273,7 @@ function manualTestScreen() {
 	drawCarrierInfo();
 	g.setFontBitmap();
 	g.drawString("BTN2 - cycle carrier",1,53);
-	g.drawString("BTN3 - select band",1,59);
+	g.drawString("BTN3 - start test",1,59);
 	g.flip();
 }
 
