@@ -3,12 +3,8 @@
 // 10.192.200.12
 
 // HIGH PRIORITY
-// - connect to carrier - auto/manual
-// - connection strength and details
-	/* AT+CSQ - connection strength quality
-	AT+QNWINFO - query network information - technology/operator/band/channel
-	AT+QCSQ - query and report signal strength	
-	*/
+// - reset tests results for auto testing
+// - auto test iteration
 
 // TO DO
 // - EDRX and PSM testing
@@ -16,7 +12,6 @@
 // - testing method and results quantification
 
 // TO FIX
-// - fix manual test scan/starting + control buttons - remove band select, add band value to information collection -> AT+QNWINFO
 // - combine 3 carrier arrays into 2d array
 
 //BUTTONS CONFIG
@@ -36,6 +31,9 @@ var carrier_type = [];
 var scan_result = "";
 var scan_successful = 0;
 var is_manual_test = 0;
+var connection_quality = ""; 		//CSQ
+var connection_information = ""; 	//QNWINFO
+var connection_signal = ""; 		//QCSQ
 
 //2d array used to store all data
 var connection_quality = [];
@@ -46,6 +44,7 @@ var selected_lte = 14;
 var selected_carrier = 0;
 var selected_type = 0;
 var selected_mode = 0; //connection type - 0: all, 1: GSM, 2: CAT-M, 3: NB-IoT
+var display_info = 0;
 
 //----- CONSTANTS -----//
 var AUTOSCAN_DEFAULT = 2; //change here if required
@@ -75,14 +74,14 @@ var LTE_NAMES = ["B1","B2","B3","B4","B5","B8","B12","B13","B18","B19","B20","B2
 var CONNECTION_NAMES = ["GSM","CAT-M1","NB-IoT"];
 var CONNECTION_TYPES = [0,8,9];
 
-var MAX_SCAN_DURATION = 150000;
+var MAX_SCAN_DURATION = 180000; //time in ms
 
 var MODE_NAMES = ["Auto","GSM","CAT-M1","NB-IoT"];
 					//GSM,   CATM,	  NBIoT,	scanseq, scanmode,iotopmode
 var MODE_VALUES = [	['F','400A0E189F','A0E189F','020301','0','2'], //automatic mode
 					['F',	'0',		'0',	'01'	,'1','2'], //GSM only
 					['0','400A0E189F',	'0',	'02'	,'3','0'], //CAT-M only
-					['0','0',			'0',	'03'	,'3','1']];//NB-IoT only
+					['0','0',		'A0E189F',	'03'	,'3','1']];//NB-IoT only
 
 require("Font4x4").add(Graphics);
 require("Font6x8").add(Graphics);
@@ -101,18 +100,15 @@ function cycleCarrier() {
 	}
 }
 
-/* function cycleBand() { // probably not needed for current test method
-	selected_lte += 1;
-	if (LTE_BANDS[selected_lte] == "0") {
-		selected_lte = 0;
-	}
-} */
-
 function cycleMode() {
 	selected_mode += 1;
 	if (selected_mode > 3) {
 		selected_mode = 0;
 	}
+}
+
+function cycleCarrierInfo() { //change to numerical for 3 or more screens
+	display_info = !display_info;
 }
 
 function assignButtons(current_screen) {	//button configuration - TOP LEFT CCW - 1,2,3,4
@@ -139,23 +135,6 @@ function assignButtons(current_screen) {	//button configuration - TOP LEFT CCW -
 			startManualTest();
 		}, BTN3, {edge:"rising", debounce:50, repeat:true});
 	} 
-	/* else if (current_screen == 2) { 				// band select screen - TO REMOVE - not needed for current testing method
-		setWatch(() => {
-			autoTest();
-		}, BTN4, {edge:"rising", debounce:50, repeat:true});
-		setWatch(() => {
-			cycleBand();
-			g.setFont6x8();
-			g.setColor(0);
-			g.fillRect(56,40,127,52);
-			g.setColor(1);
-			g.drawString(LTE_NAMES[selected_lte],56,42);
-			g.flip();
-		}, BTN2, {edge:"rising", debounce:50, repeat:true});
-		setWatch(() => {
-			startManualTest();									//TODO - get working
-		}, BTN3, {edge:"rising", debounce:50, repeat:true});
-	}  */
 	else if (current_screen == 3) {				// autotest results screen
 		setWatch(() => {
 			cycleCarrier();
@@ -187,11 +166,12 @@ function assignButtons(current_screen) {	//button configuration - TOP LEFT CCW -
 	}
 	else if (current_screen == 5) {				//connected to carrier screen
 		setWatch(() => {
-			//placeholder
+			cycleCarrierInfo();
+			connectionScreen();
 		}, BTN2, {edge:"rising", debounce:50, repeat:true});
 		setWatch(() => {
-			disconnectModem()
-			.then(() => manualTestScreen());
+			disconnectModem();
+			manualTestScreen();
 		}, BTN3, {edge:"rising", debounce:50, repeat:true});
 	}
 }
@@ -213,6 +193,14 @@ function processDataInterrupt() {
 	else {
 		setTimeout( function() { autoTestScreen();}, 1200);
 	}
+}
+
+function processConnectionInterrupt() {
+	Serial1.removeListener("data", processConnectionInterrupt);
+	display_info = 0;
+	getNetworkDetails()
+	.then(() => processNetworkDetails())
+	.then(() => connectionScreen());
 }
 
 //----- DISPLAY FUNCTIONS -----//
@@ -282,40 +270,32 @@ function connectionScreen() {
 	g.clear();
 	g.setFont8x12();
 	g.drawString("Connection Details",2,0);
-	g.drawString("Connection Details",2,0);
-	g.setFont4x4();
-	g.drawString("Carrier ID: ",2,12);
-	g.drawString("Connection Type: ",2,18);
-	g.drawString("Band",2,24);
-	g.drawString("Channel ID",2,30);
-	g.drawString("Signal Strength: ",2,36);
-	g.drawString("dB",119,36); 							//CHECK
-	g.drawString("Bit Error Rate",2,42);
-	g.drawString("SNR",2,48);
-	g.drawString("dB",119,48); 							//CHECK
-	for (var i=0;i<7;i+=1) g.drawString(connection_quality[i], 80, 12 + (6 * i));		//CHECK
+	g.setFont6x8();
+	if (display_info == 0) {
+		g.drawString("Carrier ID: ",2,12);
+		g.drawString("Connection Type: ",2,22);
+		g.drawString("Band: ",2,32);
+		g.drawString("Channel ID: ",2,42);
+		for (var i=0;i<4;i+=1) g.drawString(connection_quality[i], 80, 12 + (10 * i));
+	}
+	else {
+		g.drawString("Signal Strength: ",2,12);
+		g.drawString("Error Rate: ",2,22);
+		g.drawString("SNR: ",2,32);
+		for (var i=4;i<7;i+=1) g.drawString(connection_quality[i], 80, 12 + (10 * (i - 4)));
+		g.setFontBitmap();
+		g.drawString("dB",119,14); 							//CHECK
+		g.drawString("dB",119,34); 							//CHECK
+	}
+	
 	if (is_manual_test) {
 		assignButtons(5);
 		g.setFontBitmap();
-		g.drawString("BTN3 - disconnect from network",1,59); 		//CHECK
+		g.drawString("BTN2 - cycle connection details",1,53);
+		g.drawString("BTN3 - disconnect from network",1,59);
 	}
 	g.flip();
 }
-
-/* //TO REMOVE - NOT NEEDED
-function bandSelectScreen() {
-	assignButtons(2);
-	g.setColor(0);
-	g.fillRect(0,50,127,63);
-	g.setColor(1);
-	g.setFont6x8();
-	g.drawString("Band: ",2,42);
-	g.drawString(LTE_NAMES[selected_lte],56,42);
-	g.setFontBitmap();
-	g.drawString("BTN2 - cycle band",1,53);
-	g.drawString("BTN3 - start test",1,59);
-	g.flip();
-} */
 
 function drawCarrierInfo() {
 	g.setFont6x8();
@@ -454,7 +434,7 @@ function connectModem(carrier,type) {	//requires operator in numeric format
 	sendAtCommand('AT+CGDCONT=1,\"IP\",\"em\",,')						//apn connection details - em for emnify, iot.1nce.net for 1nce
 	.then(() => sendAtCommand('AT+CFUN=1'))								//turn on modem transmitter
 	.then(() => sendAtCommand('AT+CREG=2'))								//enable network registration (changed CEREG to CREG)
-	.then(() => sendAtCommand('AT+COPS=1,2,' + carrier + ',' + type, 10000));	//0 - GSM, 8 - CAT-M, 9 - NB_IoT
+	.then(() => sendAtCommand('AT+COPS=1,2,' + carrier + ',' + type, 30000));	//0 - GSM, 8 - CAT-M, 9 - NB_IoT
 }
 
 function disconnectModem() {
@@ -463,42 +443,56 @@ function disconnectModem() {
 
 //TODO - get working
 function getNetworkDetails() {
-	var temp = sendAtCommand('AT+CSQ')					//signal strength (rssi), bit error rate (ber)
+	return new Promise((resolve) => {
+		setTimeout(() => resolve(), 100);
+	}).
+	then(() => {
+		connection_quality = sendAtCommand('AT+CSQ');					//signal strength (rssi), bit error rate (ber)
+	})
 	.then(() => {
-		//process results
-		temp = JSON.stringify(temp);
+		connection_information = sendAtCommand('AT+QNWINFO');			//connection type (act), operator id (oper), current band (band), channel id (channel)
+	})
+	.then(() => {
+		connection_signal = sendAtCommand('AT+QCSQ');			//connection type (sysmode), signal strength (rssi), [lte only] reference signal received power(rsrp), signal to interference and noise (sinr), reference signal received quality (rsrq)
+	});
+}
+
+function processNetworkDetails() {
+	return new Promise((resolve) => {
+		setTimeout(() => resolve(), 1000);
+	})
+	.then(() => {
+		//CSQ
+		var temp = JSON.stringify(connection_quality);
 		var num = temp.indexOf("+CSQ");
-		temp = temp.slice(num + 5, -1);		//CHECK VALUES
+		temp = temp.slice(num + 5, -2);
 		console.log("CSQ slice = " + temp);
 		temp = temp.split(",");
 		
 		connection_quality[4] = ( -113 + (2* temp[0])); //CHECK VALUES //rssi scaled to dB
-		connection_quality[5] = temp[1]; //ber
-	})
-	.then(() => {
-		temp = sendAtCommand('AT+QNWINFO');			//connection type (act), operator id (oper), current band (band), channel id (channel)
-		//process results
-		temp = JSON.stringify(temp);
-		var num = temp.indexOf("+QNWINFO");
-		temp = temp.slice(num + 9, -1);		//CHECK VALUES
+		temp[1] == 99 ? connection_quality[5] = 0 : connection_quality[5] = temp[1]; //ber
+		
+		//QNWINFO
+		temp = JSON.stringify(connection_information);
+		num = temp.indexOf("+QNWINFO");
+		temp = temp.slice(num + 9, -2);
 		console.log("QNWINFO slice = " + temp);
 		temp = temp.split(",");
 		
-		connection_quality[1] = temp[0]; //act
-		connection_quality[0] = temp[1]; //oper id
-		connection_quality[2] = temp[2]; //band
-		connection_quality[3] = temp[3]; //channel
-	})
-	.then(() => {
-		temp = sendAtCommand('AT+QCSQ');			//connection type (sysmode), signal strength (rssi), [lte only] reference signal received power(rsrp), signal to interference and noise (sinr), reference signal received quality (rsrq)
-		//process results - different for GSM vs LTE
-		temp = JSON.stringify(temp);
-		var num = temp.indexOf("+QCSQ");
-		temp = temp.slice(num + 6, -1);		//CHECK VALUES
+		connection_quality[1] = (temp[0]).slice(3,-2); //act
+		connection_quality[0] = (temp[1]).slice(2,-2); //oper id
+		connection_quality[2] = (temp[2]).slice(6,-2); //band
+		connection_quality[3] = (temp[3]); //channel
+		
+		//QCSQ
+		temp = JSON.stringify(connection_signal);
+		num = temp.indexOf("+QCSQ");
+		temp = temp.slice(num + 6, -2);
 		console.log("QCSQ slice = " + temp);
 		temp = temp.split(",");
 		
 		connection_quality[6] = ((temp[3] / 5) - 20); //CHECK CONVERSION //sinr converted to dB
+	});
 }
 
 function autoTest() {
@@ -540,18 +534,14 @@ function manualTestScan() {
 }
 
 function startManualTest() {
-	configureModem(selected_mode)
-	.then(() => {
-		g.setColor(0);
-		g.fillRect(0,53,127,63);
-		g.setColor(1);
-		g.setFontBitmap();
-		g.drawString("Connecting to " + carrier_name[selected_carrier],2,57);
-		g.flip();
-	})
-	.then(() => connectModem(carrier_id[selected_carrier],carrier_type[selected_carrier]))
-	.then(() => getNetworkDetails())
-	.then(() => connectionScreen());
+	g.setColor(0);
+	g.fillRect(0,53,127,63);
+	g.setColor(1);
+	g.setFontBitmap();
+	g.drawString("Connecting to " + carrier_name[selected_carrier],2,57);
+	g.flip();
+	connectModem(carrier_id[selected_carrier],carrier_type[selected_carrier]);
+	Serial1.on("data", processConnectionInterrupt);
 }
 
 //----- MAIN FUNCTION -----//
@@ -573,11 +563,11 @@ function onInit() {
 	assignButtons(0);
 	digitalWrite(LED1, backlight);
 	
-	//sendAtCommand('AT+CMEE=2');			//verbose error logging
-	
 	startupScreen();
 	resetModem();
-	setTimeout(function() {autoTest();}, 5000);
+	//setTimeout(function() {autoTest();}, 5000);
+	
+	setTimeout(function() {manualTest();}, 5000); //used during testing
 	
 }
 onInit(); //auto run during dev
