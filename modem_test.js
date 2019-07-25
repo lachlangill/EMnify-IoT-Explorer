@@ -3,7 +3,6 @@
 // 10.192.200.12
 
 // HIGH PRIORITY
-// - reset tests results for auto testing
 // - auto test iteration
 
 // TO DO
@@ -11,7 +10,7 @@
 // - power draw/battery level
 // - testing method and results quantification
 
-// TO FIX
+// TO FIX - OPTIONAL
 // - combine 3 carrier arrays into 2d array
 
 //BUTTONS CONFIG
@@ -33,6 +32,8 @@ var is_manual_test = 0;
 var connection_quality = ""; 		//CSQ
 var connection_information = ""; 	//QNWINFO
 var connection_signal = ""; 		//QCSQ
+
+var connection_status;	//used for interrupt handling
 
 var connection_quality = []; 	//operator id, network type, band, channel, rssi, ber, sinr
 
@@ -108,13 +109,14 @@ function assignButtons(current_screen) {	//button configuration - TOP LEFT CCW -
 	setWatch(() => {
 		toggleBacklight();
 	}, BTN1, {edge:"rising", debounce:50, repeat:true});
-	if (current_screen == 0) {						// automatic testing screen
+	if (current_screen == 0) {						// automatic testing start screen
 		setWatch(() => {
-			if (scan_successful) {				//only allow manual test after successful scan
-				manualTest();
-			}
+			startAutoTest();
+		}, BTN3, {edge:"rising", debounce:50, repeat:true});
+		setWatch(() => {
+			manualTest();
 		}, BTN4, {edge:"rising", debounce:50, repeat:true});
-	} 
+	}
 	else if (current_screen == 1) {				// manual testing screen
 		setWatch(() => {
 			autoTest();
@@ -180,10 +182,12 @@ function processDataInterrupt() {
 		console.log("Hard reset required.");
 	}
 	if (is_manual_test) {
-		setTimeout( function() { manualTestScreen();}, 1000);
+		setTimeout( function() { manualTestScreen();}, 4000);
 	}
 	else { //start automatic test - TODO
-		setTimeout( function() { autoTestScreen();}, 1000);
+		g.setFontBitmap();
+		g.drawString("Connections found. Testing...",1,57);		
+		setTimeout( function() { processAutoTest();}, 5000);
 	}
 }
 
@@ -193,6 +197,9 @@ function processConnectionInterrupt() {
 	getNetworkDetails()
 	.then(() => processNetworkDetails())
 	.then(() => connectionScreen());
+	if (!is_manual_test) {
+		cycleAutoTest();
+	}
 }
 
 //----- DISPLAY FUNCTIONS -----//
@@ -208,14 +215,23 @@ function startupScreen() {
 	//setTimeout(function() {mainScreen();}, 3000);
 }
 
-function autoTestScreen() {
+function autoTestStartScreen() {
 	assignButtons(0);
 	g.clear();
 	g.setFont8x12();
 	g.drawString("Auto Network Test",10,0);
-	drawCarrierInfo();
 	g.setFontBitmap();
-	//g.drawString("BTN4 - change to manual testing",1,57);
+	g.drawString("BTN3 - start automatic testing",1,51);
+	g.drawString("BTN4 - change to manual testing",1,57);
+	g.flip();
+}
+
+function autoTestScreen() {
+	g.clear();
+	g.setFont8x12();
+	g.drawString("Auto Network Test",10,0);
+	//drawCarrierInfo();
+	g.setFontBitmap();
 	g.flip();
 }
 
@@ -357,7 +373,7 @@ function scanCarriers() {
 
 function parseScanResult() {
 	return new Promise((resolve) => {
-		setTimeout(() => resolve(), 100);
+		setTimeout(() => resolve(), 3000); //long enough for scan results to be sent through serial
 	})
 	.then(() => {
 		console.log("scan_result = " + scan_result);
@@ -411,9 +427,22 @@ function parseScanResult() {
 
 function connectModem(carrier,type) {	//requires operator in numeric format
 	sendAtCommand('AT+CGDCONT=1,\"IP\",\"em\",,')						//apn connection details - em for emnify, iot.1nce.net for 1nce
-	.then(() => sendAtCommand('AT+CFUN=1'))								//turn on modem transmitter
 	.then(() => sendAtCommand('AT+CREG=2'))								//enable network registration (changed CEREG to CREG)
-	.then(() => sendAtCommand('AT+COPS=1,2,' + carrier + ',' + type, 30000));	//0 - GSM, 8 - CAT-M, 9 - NB_IoT
+	.then(() => Serial1.on("data", processConnectionInterrupt))
+	.then(() => {
+		connection_status = sendAtCommand('AT+COPS=1,2,' + carrier + ',' + type, 120000); 	//0 - GSM, 8 - CAT-M, 9 - NB_IoT
+	})
+	.catch((err) => {
+		g.clear();
+		g.setFontBitmap();
+		g.drawString("Error. Cannot connect to carrier.");
+		g.flip();
+		console.log('catch', err);
+		if (!is_manual_test) {
+			setTimeout( function() {processAutoTest();}, 5000);
+			//cycleAutoTest();
+		}
+	});
 }
 
 function disconnectModem() {
@@ -473,19 +502,53 @@ function processNetworkDetails() {
 	});
 }
 
-function autoTest() {
+function autoTest() { //starting screen
+	autoTestStartScreen();
+}
+
+function startAutoTest() { //called after confirming test start - config and start scan
+	autoTestScreen();
 	is_manual_test = 0;
+	selected_carrier = 0;
 	scan_result = ""; //clear scan results
 	selected_mode = AUTOSCAN_DEFAULT;			//autoscan default
-	autoTestScreen();
-	assignButtons(0);
 	configureModem(selected_mode) // 0 - automatic mode
 	.then(() => {
 		g.setFontBitmap();
 		g.drawString("Scanning for carriers...",2,42);
 		g.flip();
 	})
-	.then(() => scanCarriers());
+	.then(() => scanCarriers()); //TODO - in results handler - call function and iterate through results
+}
+
+function processAutoTest() { // called from callback - iterate through carrier results and test connection
+	console.log("processing auto test...");
+	autoTestScreen();
+	drawCarrierInfo();
+	connectModem(carrier_id[selected_carrier],carrier_type[selected_carrier]);
+	g.setFontBitmap();
+	g.drawString("Connecting...",1,57);
+	g.flip();
+	selected_carrier += 1; //used to increment to next carreir on next loop
+}
+
+function cycleAutoTest() { //used to iterate through auto test results
+	setTimeout( function() {cycleCarrierInfo();}, 1000);
+	setTimeout( function() {connectionScreen();}, 2000);
+	setTimeout( function() {cycleCarrierInfo();}, 4000);
+	setTimeout( function() {disconnectModem();}, 4000);
+	//selected_carrier += 1;
+	if (selected_carrier == null) {	//end test
+		setTimeout( function() {
+			g.clear();
+			g.setFont6x8();
+			g.drawString("Automatic test completed.", 1,30); //CHECK
+		}, 60000);
+		setTimeout( function() {autoTestStartScreen();}, 10000);
+	}
+	else {	//continue test
+		setTimeout( function() {processAutoTest();}, 6000);
+	}
 }
 
 function manualTest() {
@@ -512,10 +575,9 @@ function startManualTest() {
 	g.fillRect(0,53,127,63);
 	g.setColor(1);
 	g.setFontBitmap();
-	g.drawString("Connecting to " + carrier_name[selected_carrier],2,57);
+	g.drawString("Connecting to " + carrier_name[selected_carrier] + "...",2,57);
 	g.flip();
 	connectModem(carrier_id[selected_carrier],carrier_type[selected_carrier]);
-	Serial1.on("data", processConnectionInterrupt);
 }
 
 //----- MAIN FUNCTION -----//
@@ -530,9 +592,7 @@ function onInit() {
 	Serial1.on('data', (data) => {});
 	Serial1.setup(9600, {tx: D11, rx: D10});
 	at = require("AT").connect(Serial1);
-	if (debug) {
-		at.debug(true);
-	}
+	at.debug(debug);
 	assignButtons(0);
 	digitalWrite(LED1, backlight);
 	startupScreen();
