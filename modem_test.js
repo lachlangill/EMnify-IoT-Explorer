@@ -426,11 +426,14 @@ function parseScanResult() {
 }
 
 function connectModem(carrier,type) {	//requires operator in numeric format
-	sendAtCommand('AT+CGDCONT=1,\"IP\",\"em\",,')						//apn connection details - em for emnify, iot.1nce.net for 1nce
+	return new Promise((resolve) => {
+		setTimeout(() => resolve(), 100);
+	})
+	.then(() => sendAtCommand('AT+CGDCONT=1,\"IP\",\"em\",,'))			//apn connection details - em for emnify, iot.1nce.net for 1nce
 	.then(() => sendAtCommand('AT+CREG=2'))								//enable network registration (changed CEREG to CREG)
 	.then(() => Serial1.on("data", processConnectionInterrupt))
 	.then(() => {
-		connection_status = sendAtCommand('AT+COPS=1,2,' + carrier + ',' + type, 120000); 	//0 - GSM, 8 - CAT-M, 9 - NB_IoT
+		connection_status = sendAtCommand('AT+COPS=1,2,' + carrier + ',' + type, 60000); 	//0 - GSM, 8 - CAT-M, 9 - NB_IoT
 	})
 	.catch((err) => {
 		g.clear();

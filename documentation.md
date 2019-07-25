@@ -16,14 +16,14 @@ Each button generally controls the same function on the device. Each individual 
 - **BTN4** is used to toggle between automatic and manual test modes.
 
 The network antenna is present on the left side of the device. This should be in the vertical orientation for best network performance.
-A micro-USB charging port can be found on the right side of the device, which is used to recharge the internal battery.
-A power switch can be found beside the charging port. This is used to turn the testing device on or off.
+A micro-USB charging port can be found beside the antenna on the left side, which is used to recharge the internal battery. 
+A power switch can be found on the other side of the antenna, used to turn the testing device on or off.
 
 ---
 
 # Key Technical Specifications
 
-### Microcontroller
+## Microcontroller
 |Parameter|Description/Value|
 ---|---
 Name|Espruino Pixl.js
@@ -33,7 +33,7 @@ Supply voltage (Vin)|3 – 16 V (min – max)
 Maximum current draw (Imax)|12 mA (with NFC/Bluetooth scanning)
 Memory|64 kB RAM, 512 kB Flash
 
-### Network Modem and Shield
+## Network Modem and Shield
 |Parameter|Description/Value|
 ---|---
 Name|Dragino NB-IoT shield with BG96 modem
@@ -46,7 +46,7 @@ CAT-M1 bands|1/2/3/4/5/8/12/13/18/19/20/26/28/39
 NB-IoT bands|1/2/3/4/5/8/12/13/18/19/20/26/28
 GNSS support|GPS, GLONASS, BeiDou/Compass, Galileo, QZSS
 
-### Battery
+## Battery
 |Parameter|Description/Value|
 ---|---
 Capacity|2000 mAh (typ.)
@@ -62,22 +62,12 @@ Recharge current|500 mA (max.)
 
 After turning the device on, the Pixl.js bootloader screen will be displayed for a few seconds.
 The device will then load up the network scanning program from its onboard memory.
-The program will go through a few stages of initialization, before reaching the automatic testing screen.
-From this screen you can press **BTN3** to start the automatic network scan and test, or press **BTN4** to switch to manual testing.
+The program will go through a few stages of initialization, before reaching the manual testing screen.
+From this screen you can press **BTN2** to cycle between manual testing mdoes, **BTN3** to start the manual network scan, or press **BTN4** to switch to automatic testing.
 
-### Automatic Scan
+## Manual Scan
 
-To start the automatic test, press **BTN3** on the automatic test screen.
-The device will then automatically scan for all available carriers with all network types that are present in the current location.
-After completing a successful scan, the results will be processed by the device and made available on the screen.
-Press **BTN2** to cycle through the results of the scan.
-
-To restart the automatic scan, press **BTN4** twice to reset the automatic test.
-To switch to manual scanning mode, press **BTN4** once.
-
-### Manual Scan
-
-After pressing **BTN4** on the automatic test screen to reach the manual test screen, the network type can be selected by pressing **BTN2** to cycle between GSM, CAT-M1, and NB-IoT scan modes.
+After pressing **BTN4** on the automatic test screen to reach the manual test screen, the network type can be selected by pressing **BTN2** to cycle between Automatic, GSM, CAT-M1, and NB-IoT scan modes.
 Pressing **BTN3** will initiate the scan of the desired network type.
 After scanning for carriers that offer the desired network type, the results will be processed by the device and made available on the screen.
 Pressing **BTN2** will cycle between the scan results, and **BTN3** will cause the modem to connect to the currently selected carrier.
@@ -88,6 +78,20 @@ Pressing **BTN3** will disconnect the device from the chosen carrier and will di
 To initiate a different scan type, press **BTN4** twice to reset the manual test.
 To switch to automatic scanning mode, press **BTN4** once.
 
+## Automatic Scan
+
+To start the automatic test, press **BTN3** on the automatic test screen.
+The device will then automatically scan for all available carriers with all network types that are present in the current location.
+
+After completing a successful scan, the device will use the results to test each carrier and connection type sequentially.
+The connection status will be processed by the device and made available on the screen.
+The carrier ID and name will be shown, along with the network type when trying to connect.
+After connecting, the connection strength and other details will be collected and displayed on the screen.
+
+To restart the automatic scan, upon completion press **BTN4** twice to reset the automatic test.
+To switch to manual scanning mode, press **BTN4** once.
+
+
 ---
 
 # Errors and Troubleshooting
@@ -95,7 +99,7 @@ To switch to automatic scanning mode, press **BTN4** once.
 This section details some common errors that may be encountered during the device’s operation.
 Each error’s cause and alternate solutions to solve each error are detailed below.
 
-### Common Errors
+## Common Errors
 
 *CME ERROR TIMEOUT*
 
@@ -115,7 +119,7 @@ It can also be caused by invalid permissions with the modem and carriers.
 To solve this problem:
 - Reset the device and perform another scan.
 
-### Device Problems
+## Device Problems
 
 *Display isn’t turning on*
 - Check device has power
