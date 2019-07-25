@@ -602,4 +602,4 @@ function onInit() {
 	resetModem();
 	setTimeout(function() {manualTest();}, 5000);
 }
-onInit(); //auto run during dev
+onInit();  //auto run during dev
