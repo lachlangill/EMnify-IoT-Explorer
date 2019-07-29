@@ -80,6 +80,8 @@ require("Font4x4").add(Graphics);
 require("Font6x8").add(Graphics);
 require("Font8x12").add(Graphics);
 
+
+
 //----- BUTTON FUNCTIONS -----/
 function toggleBacklight() {
 	backlight = !backlight;
@@ -210,6 +212,7 @@ function processConnectionInterrupt() {
 //----- DISPLAY FUNCTIONS -----//
 function startupScreen() {
 	g.clear();
+	//g.drawImage(img,0,0);
 	for (i=0;i<43;i+=3) g.drawLine(3*i,0,56+i,63); //fancy lines
 	g.setColor(0);
 	g.fillRect(35,32,91,46);
@@ -217,7 +220,6 @@ function startupScreen() {
 	g.setColor(1);
 	g.drawString("EMnify IoT", 41,36);
 	g.flip();
-	//setTimeout(function() {mainScreen();}, 3000);
 }
 
 function autoTestStartScreen() {
@@ -332,6 +334,7 @@ sendAtCommand = function (command, timeoutMs, waitForLine) {
 		at.cmd(command + "\r\n", timeoutMs || 1E3, function processResponse(response) {
 			if (undefined === response || "ERROR" === response || response.startsWith("+CME ERROR")) {
 				reject(response ? (command + ": " + response) : (command + ": TIMEOUT"));
+				//errorScreen("response timeout", command);
 			} else if (waitForLine ? (response.startsWith(waitForLine)) : ("OK" === response)) {
 				resolve(waitForLine ? response : answer);
 			} else {
@@ -453,7 +456,19 @@ function connectModem(carrier,type) {	//requires operator in numeric format
 	.then(() => sendAtCommand('AT+CREG=2'))								//enable network registration (changed CEREG to CREG)
 	.then(() => Serial1.on("data", processConnectionInterrupt))
 	.then(() => {
-		connection_status = sendAtCommand('AT+COPS=1,2,' + carrier + ',' + type, 60000); 	//0 - GSM, 8 - CAT-M, 9 - NB_IoT
+		try {
+			connection_status = sendAtCommand('AT+COPS=1,2,' + carrier + ',' + type, 60000); 	//0 - GSM, 8 - CAT-M, 9 - NB_IoT
+		}
+		catch (err) {
+			console.log("unable to connect");
+			errorScreen("carrier connect", err);
+			if (is_manual_test) {
+				setTimeout( function() { manualTestScreen();}, 3000);
+			}
+			else {
+				setTimeout( function() { processAutoTest();}, 3000);
+			}
+		}
 	})
 	.catch((err) => {
 		errorScreen("carrier connect", err);
