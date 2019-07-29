@@ -129,6 +129,11 @@ function assignButtons(current_screen) {	//button configuration - TOP LEFT CCW -
 			startManualTest();
 		}, BTN3, {edge:"rising", debounce:50, repeat:true});
 	} 
+	else if (current_screen == 2) { 			// error screen
+		setWatch(() => {
+			onInit();
+		}, BTN3, {edge:"rising", debounce:50, repeat:true});
+	}
 	else if (current_screen == 3) {				// autotest results screen
 		setWatch(() => {
 			cycleCarrier();
@@ -294,6 +299,18 @@ function connectionScreen() {
 	g.flip();
 }
 
+function errorScreen(location,error) {
+	console.log('catch', error);
+	assignButtons(2);
+	g.clear();
+	g.setFont6x8();
+	g.drawString("ERROR",40,6); //CHECK
+	g.setFontBitmap();
+	g.drawString(location + ' ' + error,0,30);
+	g.drawString("BTN3 - reset device",1,57);
+	g.flip();
+}
+
 function drawCarrierInfo() {
 	g.setFont6x8();
 	g.setColor(0);
@@ -333,7 +350,7 @@ function resetModem() {
 	.then(() => sendAtCommand('ATE0'))				//command echo off
 	.then(() => sendAtCommand('AT+CPIN?'))			//check if sim is locked/not present
 	.catch((err) => {
-		console.log('catch', err);
+		errorScreen("modem reset", err);
 	});
 }
 
@@ -349,7 +366,7 @@ function configureModem(mode) {
 	.then(() => sendAtCommand('AT+QCFG=\"iotopmode\",' + MODE_VALUES[mode][5] + ',1'))					//IoT search mode
 	.then(() => sendAtCommand('AT+QCFG=\"servicedomain\",1,1'))				//service domain - PS only
 	.catch((err) => {
-		console.log('catch', err);
+		errorScreen("modem config", err);
 	});
 }
 
@@ -367,7 +384,7 @@ function scanCarriers() {
 	})
 	.then(() => Serial1.on("data",processDataInterrupt))
 	.catch((err) => {
-		console.log('catch', err);
+		errorScreen("carrier scan", err);
 	});
 }
 
@@ -422,6 +439,9 @@ function parseScanResult() {
 				iteration += 1;
 			}
 		}
+	})
+	.catch((err) => {
+		errorScreen("scan result", err);
 	});
 }
 
@@ -436,15 +456,16 @@ function connectModem(carrier,type) {	//requires operator in numeric format
 		connection_status = sendAtCommand('AT+COPS=1,2,' + carrier + ',' + type, 60000); 	//0 - GSM, 8 - CAT-M, 9 - NB_IoT
 	})
 	.catch((err) => {
+		errorScreen("carrier connect", err);
+		/* console.log('catch', err);
 		g.clear();
 		g.setFontBitmap();
-		g.drawString("Error. Cannot connect to carrier.");
+		g.drawString("ERROR - Cannot connect to carrier.");
 		g.flip();
-		console.log('catch', err);
 		if (!is_manual_test) {
 			setTimeout( function() {processAutoTest();}, 5000);
 			//cycleAutoTest();
-		}
+		} */
 	});
 }
 
@@ -464,6 +485,9 @@ function getNetworkDetails() {
 	})
 	.then(() => {
 		connection_signal = sendAtCommand('AT+QCSQ');			//connection type (sysmode), signal strength (rssi), [lte only] reference signal received power(rsrp), signal to interference and noise (sinr), reference signal received quality (rsrq)
+	})
+	.catch((err) => {
+		errorScreen("get network details", err);
 	});
 }
 
@@ -502,6 +526,9 @@ function processNetworkDetails() {
 		temp = temp.split(",");
 		
 		connection_quality[6] = ((temp[3] / 5) - 20); //sinr converted to dB
+	})
+	.catch((err) => {
+		errorScreen("process network details", err);
 	});
 }
 
