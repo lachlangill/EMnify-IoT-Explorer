@@ -1,23 +1,7 @@
-// testing device IMEI: 8684460306494107
-// testing device endpoint name: nbpi4 - lachlan
-// 10.192.200.12
-
-// HIGH PRIORITY
-// - auto test iteration
-
-// TO DO
-// - EDRX and PSM testing
-// - power draw/battery level
-// - testing method and results quantification
-
-// TO FIX - OPTIONAL
-// - combine 3 carrier arrays into 2d array
-
-//BUTTONS CONFIG
-// 1 - backlight toggle
-// 2 - cycle test parameters
-// 3 - start manual test/advance through selection parameters
-// 4 - manual/auto test toggle
+/* 	EMnify IoT Explorer Testing Device
+* 	Author: Lachlan Gill 2019
+*	
+*/
 
 //----- GLOBAL VARIABLES -----//
 var debug = true; //change to false when finished
@@ -27,7 +11,6 @@ var carrier_id = [];
 var carrier_name = [];		//could combine into 2d array
 var carrier_type = [];
 var scan_result = "";
-var scan_successful = 0;
 var is_manual_test = 0;
 var connection_quality = ""; 		//CSQ
 var connection_information = ""; 	//QNWINFO
@@ -41,6 +24,12 @@ var connection_quality = []; 	//operator id, network type, band, channel, rssi, 
 var selected_carrier = 0;
 var selected_mode = 0; //connection type - 0: all, 1: GSM, 2: CAT-M, 3: NB-IoT
 var display_info = 0;
+
+//data submission variables
+var post_header;
+var post_data;
+var payload;
+var server_url = "https://emnipi.herokuapp.com";	//remote data server address
 
 //----- CONSTANTS -----//
 var AUTOSCAN_DEFAULT = 0; //change here if required
@@ -79,8 +68,6 @@ var MODE_VALUES = [	['F','400A0E189F','A0E189F','020301','0','2'], //automatic m
 require("Font4x4").add(Graphics);
 require("Font6x8").add(Graphics);
 require("Font8x12").add(Graphics);
-
-
 
 //----- BUTTON FUNCTIONS -----/
 function toggleBacklight() {
@@ -306,9 +293,10 @@ function errorScreen(location,error) {
 	assignButtons(2);
 	g.clear();
 	g.setFont6x8();
-	g.drawString("ERROR",40,6); //CHECK
+	g.drawString("ERROR",40,6);
 	g.setFontBitmap();
-	g.drawString(location + ' ' + error,0,30);
+	g.drawString(location,0,30);
+	g.drawString(error,0,36);
 	g.drawString("BTN3 - reset device",1,57);
 	g.flip();
 }
@@ -334,7 +322,6 @@ sendAtCommand = function (command, timeoutMs, waitForLine) {
 		at.cmd(command + "\r\n", timeoutMs || 1E3, function processResponse(response) {
 			if (undefined === response || "ERROR" === response || response.startsWith("+CME ERROR")) {
 				reject(response ? (command + ": " + response) : (command + ": TIMEOUT"));
-				//errorScreen("response timeout", command);
 			} else if (waitForLine ? (response.startsWith(waitForLine)) : ("OK" === response)) {
 				resolve(waitForLine ? response : answer);
 			} else {
@@ -342,6 +329,13 @@ sendAtCommand = function (command, timeoutMs, waitForLine) {
 				return processResponse;
 			}
 		});
+	});
+};
+
+sendAtData = function (data) {
+	return new Promise((resolve) => {
+		Serial1.write(data);
+		resolve(data);
 	});
 };
 
@@ -379,7 +373,6 @@ function scanCarriers() {
 	})
 	.then(() => {
 		scan_result = "";
-		scan_successful = 0;
 	})
 	.then(() => sendAtCommand('AT+CFUN=1'))					//set radio to transmit
 	.then(() => {
@@ -411,7 +404,6 @@ function parseScanResult() {
 			g.flip();
 		}
 		else { 							//carriers are found - parse results
-			scan_successful = 1;
 			
 			var end_num = temp.indexOf(",,");
 			console.log("num = " + num);
@@ -448,7 +440,7 @@ function parseScanResult() {
 	});
 }
 
-function connectModem(carrier,type) {	//requires operator in numeric format
+function connectModem(carrier,type) {			//requires operator in numeric format
 	return new Promise((resolve) => {
 		setTimeout(() => resolve(), 100);
 	})
@@ -459,7 +451,7 @@ function connectModem(carrier,type) {	//requires operator in numeric format
 		try {
 			connection_status = sendAtCommand('AT+COPS=1,2,' + carrier + ',' + type, 60000); 	//0 - GSM, 8 - CAT-M, 9 - NB_IoT
 		}
-		catch (err) {
+		catch (err) {			//TODO - not working
 			console.log("unable to connect");
 			errorScreen("carrier connect", err);
 			if (is_manual_test) {
@@ -544,6 +536,37 @@ function processNetworkDetails() {
 	})
 	.catch((err) => {
 		errorScreen("process network details", err);
+	});
+}
+
+function sendConnectionResults() { //TODO - get working
+	return new Promise((resolve) => {
+		setTimeout(() => resolve(), 500);
+	})
+	.then(() => {
+		// every post request must contain the APP token and description (data):
+		// {"token":"c48cae698f2d696143a91452c6dec7f6de8e233d","description":"data content here"}
+		post_header = "POST /db HTTP/1.1\r\nHost: emnipi.herokuapp.com\r\nContent-Type: application/json\r\nContent-Length: "; 	//HTTP request header
+		post_data = "{\"token\":\"c48cae698f2d696143a91452c6dec7f6de8e233d\",\"description\":\"my pixl.js data test\"}"; 		//TODO - add test data, time, (optional) location
+		payload = post_header + post_data.length + "\r\n\r\n" + post_data; 														//concatenated data to be sent
+		console.log(payload);
+	})
+	.then(() => sendAtCommand('AT+QICSGP=1,1,\"em\",\"\",\"\",1'))		//config TCP/IP
+	.then(() => sendAtCommand('AT+QIACT=1',10000))						//activate context
+	.then(() => sendAtCommand('AT+QHTTPCFG=\"contextid\",1'))			//config PDP context
+	.then(() => sendAtCommand('AT+QHTTPCFG=\"requestheader\",1'))	 	//allow request header
+	.then(() => sendAtCommand('AT+QHTTPCFG=\"responseheader\",1'))		//allow HTTP response header
+	.then(() => sendAtCommand('AT+QHTTPURL=' + server_url.length + ',10',10000,"CONNECT"))			//puts modem in data mode to accept URL
+	.then(() => sendAtData(server_url))
+	.then(() => {
+		setTimeout(function() {
+			sendAtCommand('AT+QHTTPPOST=' + payload.length + ',20,60',20000,"CONNECT")	//TODO - check data length, change max response times (current 80)
+			.then(() => sendAtData(payload));
+		}, 5000);		//5 second delay to avoid losing data
+	})
+	//.then(() => sendAtCommand('AT+QIDEACT=1'))							//deactivate context
+	.catch((err) => {
+		errorScreen("sending connection results", err);
 	});
 }
 
