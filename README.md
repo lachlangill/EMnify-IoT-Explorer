@@ -1,6 +1,6 @@
 # EMnify Pixl.js IoT Explorer Board
 
-This testing device is comprised of a [Pixl.js](https://www.espruino.com/Pixl.js) microcontroller with a [NB-IoT Explorer shield](https://wiki.dragino.com/index.php?title=NB-IoT_Shield), complete with an [EMnify sim card](https://www.emnify.com/global-iot-sim) for global network connectivity.
+This testing device is comprised of a [Pixl.js](https://www.espruino.com/Pixl.js) microcontroller with a [NB-IoT Explorer shield](https://wiki.dragino.com/index.php?title=NB-IoT_Shield), complete with an [EMnify SIM card](https://www.emnify.com/global-iot-sim) for global network connectivity.
 
 This code is designed to run on a Pixl.js board. Other boards may be capable of running this program with some modification.
 
