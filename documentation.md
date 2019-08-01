@@ -74,7 +74,7 @@ From this screen you can press **BTN2** to cycle between manual testing modes, *
 
 ## Manual Scan
 
-After pressing **BTN4** on the automatic test screen to reach the manual test screen, the network type can be selected by pressing **BTN2** to cycle between automatic, GSM, CAT-M1, and NB-IoT scan modes.
+After pressing **BTN4** on the automatic test screen to reach the manual test screen, the network type can be selected by pressing **BTN2** to cycle between Automatic, GSM, CAT-M1, and NB-IoT scan modes.
 Pressing **BTN3** will initiate the scan of the desired network type.
 After scanning for carriers that offer the desired network type, the results will be processed by the device and made available on the screen.
 Pressing **BTN2** will cycle between the scan results, and **BTN3** will cause the modem to connect to the currently selected carrier.
@@ -89,7 +89,7 @@ To switch to automatic scanning mode, press **BTN4** once.
 
 ## Automatic Scan
 
-By pressing BTN4 on the manual test screen, the automatic test Screen will be displayed. 
+By pressing BTN4 on the manual test screen, the automatic test screen will be displayed. 
 To start the automatic test, press **BTN3** on the automatic test screen.
 The device will then automatically scan for all available carriers with all network types that are present in the current location.
 
@@ -100,7 +100,7 @@ The carrier ID and name will be shown, along with the network type when the mode
 After connecting, the connection strength and other details will be collected and displayed on the screen.
 The modem will then disconnect, moving on to test the next connection.
 
-Upon completion of the test, the device returns to the automatic test Screen.
+Upon completion of the test, the device returns to the automatic test screen.
 To restart the automatic test, press **BTN3** to restart the test.
 To switch to manual scanning mode, press **BTN4** once.
 
