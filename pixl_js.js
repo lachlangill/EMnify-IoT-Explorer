@@ -234,6 +234,8 @@ function connectionScreen() {
 
 function errorScreen(location,error) {
 	console.log('catch', error);
+	clearTimeout();
+	clearInterval();
 	assignButtons(2);
 	g.clear();
 	g.setFont6x8();
